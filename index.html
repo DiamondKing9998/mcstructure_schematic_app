@@ -393,6 +393,8 @@
                 });
                 // Expose a global diagnostic snapshot so the console can read it any time
                 window._paletteVisuals = diag;
+                // Also expose the full visual objects so we can inspect the actual materials and maps
+                window._paletteVisualObjects = paletteVisuals;
                 console.log('Palette visual sources (first 200):', diag.slice(0, 200));
             } catch (e) {
                 console.warn('Palette diagnostic failed', e);
@@ -690,6 +692,25 @@
                     console.log(`Palette[${i}] id=${(p && (p.name || p.block)) || JSON.stringify(p)} -> (no diagnostic cached)`);
                 });
                 console.log('No cached palette visuals available (call after a successful buildStructure to generate _paletteVisuals).');
+            };
+
+            window.dumpPaletteMaterialMaps = function() {
+                const visuals = window._paletteVisualObjects;
+                if (!Array.isArray(visuals) || visuals.length === 0) {
+                    console.warn('No paletteVisualObjects cached; call buildStructure first.');
+                    return;
+                }
+                visuals.forEach((v, i) => {
+                    const mats = Array.isArray(v.materials) ? v.materials : [v.materials];
+                    const matInfo = mats.map((m, idx) => ({
+                        matIndex: idx,
+                        hasMap: !!(m && m.map),
+                        mapImageSize: m && m.map && (m.map.image?.naturalWidth || m.map.image?.width) || null,
+                        sourcePath: m?.map?.userData?.sourcePath || m?.userData?.sourcePath || null
+                    }));
+                    console.log(`PaletteVisual[${i}] materials=${mats.length}`, matInfo);
+                });
+                console.log('paletteVisualObjects length:', visuals.length);
             };
 
             // FIX: Attach event listener programmatically since we are using 'type="module"'
