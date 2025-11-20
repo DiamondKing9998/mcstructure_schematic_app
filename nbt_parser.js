@@ -67,14 +67,12 @@ function toNumber(value) {
     return Number(value ?? 0);
 }
 
-function buildMaterialCounts(structureSection) {
+function buildMaterialCounts(structureSection, palette) {
     if (!structureSection) {
         return {};
     }
 
-    const palette = structureSection.palette?.default?.block_palette ?? [];
-    const paletteNames = palette.map((entry) => (entry?.name ?? 'unknown').toLowerCase());
-
+    const paletteNames = palette.map((entry) => (entry?.name ?? 'minecraft:unknown').toLowerCase());
     const counts = Object.create(null);
     const blockIndexLayers = structureSection.block_indices ?? [];
 
@@ -96,16 +94,53 @@ function buildMaterialCounts(structureSection) {
     return counts;
 }
 
+function buildPalette(structureSection) {
+    const rawPalette = structureSection.palette?.default?.block_palette ?? [];
+    return rawPalette.map((entry, index) => ({
+        index,
+        name: entry?.name ?? 'minecraft:unknown',
+        states: entry?.states ?? {},
+        version: entry?.version ?? 0,
+    }));
+}
+
+function buildBlocks(structureSection, size, paletteLength) {
+    const blockIndicesLayers = structureSection.block_indices ?? [];
+    const primaryLayer = blockIndicesLayers[0] ?? [];
+    const totalBlocks = size.x * size.y * size.z;
+    const limit = Math.min(primaryLayer.length, totalBlocks);
+    const areaXZ = size.x * size.z;
+    const blocks = [];
+
+    for (let idx = 0; idx < limit; idx++) {
+        const paletteIndex = toNumber(primaryLayer[idx]);
+        if (!Number.isFinite(paletteIndex) || paletteIndex <= 0 || paletteIndex >= paletteLength) {
+            continue;
+        }
+
+        const y = Math.floor(idx / areaXZ);
+        const rem = idx % areaXZ;
+        const z = Math.floor(rem / size.x);
+        const x = rem % size.x;
+
+        blocks.push({ x, y, z, paletteIndex });
+    }
+
+    return blocks;
+}
+
 function transformStructure(rootCompound) {
     const size = normalizeSize(rootCompound.size);
     const structureSection = rootCompound.structure ?? {};
-
-    const materials = buildMaterialCounts(structureSection);
+    const palette = buildPalette(structureSection);
+    const materials = buildMaterialCounts(structureSection, palette);
+    const blocks = buildBlocks(structureSection, size, palette.length);
 
     return {
         size,
+        palette,
         materials,
-        blocks: [], // Placeholder until full block reconstruction is implemented.
+        blocks,
         raw: rootCompound,
     };
 }

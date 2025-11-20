@@ -32,6 +32,23 @@
             overflow-y: auto;
             scrollbar-width: thin;
         }
+        .material-thumb {
+            width: 42px;
+            height: 42px;
+            border-radius: 0.75rem;
+            background: #f3f4f6;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            border: 1px solid #e5e7eb;
+        }
+        .material-thumb img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            image-rendering: pixelated;
+        }
         /* Custom Scrollbar for dark theme */
         #material-list::-webkit-scrollbar { width: 8px; }
         #material-list::-webkit-scrollbar-thumb { background-color: #6b7280; border-radius: 4px; }
@@ -101,10 +118,14 @@
     <script type="module">
         // Import the parsing function. MOCK_BLOCK_DATA is now handled internally by the NBT parser mock.
         import { parseMCStructureBinary } from './nbt_parser.js';
+        import { ResourcePackTextureManager } from './texture_manager.js';
         
         // --- CONSTANTS AND GLOBALS ---
         const BLOCK_SIZE = 1; 
         const STACK_SIZE = 64;
+        const textureManager = new ResourcePackTextureManager('./resource_pack');
+
+        let sharedCubeGeometry = null;
 
         // Three.js Globals
         let scene, camera, renderer, controls, blockGroup, gridHelper;
@@ -112,6 +133,13 @@
         let maxLayer = 0;
         let currentLayer = 0;
         let isGridVisible = true;
+
+        function getSharedCubeGeometry() {
+            if (!sharedCubeGeometry) {
+                sharedCubeGeometry = new THREE.BoxGeometry(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+            }
+            return sharedCubeGeometry;
+        }
 
         // --- CUSTOM UI FUNCTIONS ---
         function withElement(id, callback) {
@@ -162,7 +190,7 @@
          * Calculates material counts, rounds them up to stacks, and displays the list.
          * @param {object} materials - A map of block ID to count.
          */
-        function displayMaterialList(materials) {
+        async function displayMaterialList(materials) {
             console.log("Building Material List.");
             const listContainer = withElement('material-list', (el) => {
                 el.innerHTML = '';
@@ -179,15 +207,35 @@
                 return;
             }
 
-            sortedMaterials.forEach(([id, count]) => {
+            const materialEntries = await Promise.all(
+                sortedMaterials.map(async ([id, count]) => {
+                    let previewSrc = '';
+                    try {
+                        previewSrc = await textureManager.getBlockPreview(id);
+                    } catch (error) {
+                        console.warn(`Preview texture missing for ${id}`, error);
+                    }
+                    return { id, count, previewSrc };
+                })
+            );
+
+            materialEntries.forEach(({ id, count, previewSrc }) => {
                 const totalStacks = Math.ceil(count / STACK_SIZE);
                 const stacksDisplay = `${totalStacks} stack${totalStacks !== 1 ? 's' : ''}`;
-                const baseId = id.split(':')[1] || id; 
+                const baseId = id.split(':')[1] || id;
+                const displayName = baseId.replace(/_/g, ' ').toUpperCase();
 
                 const listItem = document.createElement('div');
-                listItem.className = 'flex justify-between items-center p-2 mb-1 bg-white rounded-md shadow-sm border-l-4 border-indigo-400';
+                listItem.className = 'flex justify-between items-center p-2 mb-2 bg-white rounded-md shadow-sm border border-gray-100';
+                const thumbnail = previewSrc
+                    ? `<img src="${previewSrc}" alt="${displayName} texture" />`
+                    : `<span class="text-[10px] text-gray-400">N/A</span>`;
+
                 listItem.innerHTML = `
-                    <span class="font-medium text-gray-800">${baseId.replace(/_/g, ' ').toUpperCase()}</span>
+                    <div class="flex items-center gap-3">
+                        <div class="material-thumb">${thumbnail}</div>
+                        <span class="font-medium text-gray-800">${displayName}</span>
+                    </div>
                     <div class="text-right">
                         <span class="block text-sm font-bold text-indigo-600">${stacksDisplay}</span>
                         <span class="block text-xs text-gray-500">${count} blocks</span>
@@ -197,7 +245,7 @@
                     listContainer.appendChild(listItem);
                 }
             });
-            console.log(`Material list built with ${sortedMaterials.length} unique items.`);
+            console.log(`Material list built with ${materialEntries.length} unique items.`);
         }
 
         /**
@@ -264,30 +312,49 @@
         }
 
         /**
-         * Draws all blocks from the structure data in 3D.
+         * Draws all blocks from the structure data in 3D using resource-pack textures.
          * @param {object} data - The parsed structure data.
          */
-        function buildStructure(data) {
+        async function buildStructure(data) {
             console.log("Building 3D structure visualization.");
             while (blockGroup.children.length > 0) {
                 blockGroup.remove(blockGroup.children[0]);
             }
 
-            const { blocks, size } = data;
-            const center = { x: (size.x - 1) * BLOCK_SIZE / 2, y: 0, z: (size.z - 1) * BLOCK_SIZE / 2 };
+            if (!data || !Array.isArray(data.blocks) || data.blocks.length === 0) {
+                console.warn("No solid blocks available to visualize.");
+                return;
+            }
 
-            const geometry = new THREE.BoxGeometry(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+            const { blocks, size, palette } = data;
+            const center = {
+                x: (size.x - 1) * BLOCK_SIZE / 2,
+                y: 0,
+                z: (size.z - 1) * BLOCK_SIZE / 2
+            };
 
-            blocks.forEach(block => {
-                const material = new THREE.MeshLambertMaterial({ color: block.color });
-                const mesh = new THREE.Mesh(geometry, material);
+            const geometry = getSharedCubeGeometry();
+            let paletteVisuals;
+
+            try {
+                paletteVisuals = await Promise.all(
+                    palette.map((entry) => textureManager.getBlockVisual(entry))
+                );
+            } catch (error) {
+                console.error("Failed to prepare block textures:", error);
+                paletteVisuals = palette.map(() => textureManager.getFallbackVisual());
+            }
+
+            blocks.forEach((block) => {
+                const visual = paletteVisuals[block.paletteIndex] || textureManager.getFallbackVisual();
+                const mesh = new THREE.Mesh(geometry, visual.materials);
 
                 mesh.position.set(
                     block.x * BLOCK_SIZE - center.x,
                     block.y * BLOCK_SIZE + BLOCK_SIZE / 2,
                     block.z * BLOCK_SIZE - center.z
                 );
-                mesh.userData = { layer: block.layer };
+                mesh.userData = { layer: block.y };
 
                 blockGroup.add(mesh);
             });
@@ -359,8 +426,7 @@
                     maxLayer = Math.max(structureData.size.y - 1, 0);
                     currentLayer = maxLayer;
 
-
-                    displayMaterialList(structureData.materials);
+                    await displayMaterialList(structureData.materials);
 
                     const slider = document.getElementById('layerSlider');
                     if (slider) {
@@ -372,7 +438,7 @@
                     }
                     withElement('currentLayerDisplay', (el) => { el.textContent = 'All'; });
 
-                    buildStructure(structureData);
+                    await buildStructure(structureData);
                     
                     if (loadingMessageEl) {
                         loadingMessageEl.classList.add('hidden');
@@ -383,7 +449,7 @@
                     }
                     showMessage("Parsing Complete", 
                         `The structure **${file.name}** was parsed successfully.
-                        <p class="text-left mt-3">The material list now reflects the real block palette counts, grouped by block name and rounded up to 64-block stacks.</p>`, 
+                        <p class="text-left mt-3">The viewport now shows official Bedrock block textures (with orientation-aware faces), and the material list displays the same textures with stack counts rounded up to 64.</p>`, 
                         false);
 
                 } catch (error) {
