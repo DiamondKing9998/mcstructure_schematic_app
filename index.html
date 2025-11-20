@@ -10,6 +10,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <!-- Load OrbitControls for camera interaction -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <!-- Load Pako for Gzip decompression (Required for .mcstructure files) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako_inflate.min.js"></script>
     <style>
         /* Custom styles for better aesthetics and layout */
         body { font-family: 'Inter', sans-serif; background-color: #f7f9fb; }
@@ -40,6 +42,17 @@
     </style>
 </head>
 <body class="p-4">
+
+    <!-- Custom Message Box for Errors and Successes (Replaces alert()) -->
+    <div id="messageBox" class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50 hidden">
+        <div class="bg-white p-6 rounded-xl shadow-2xl max-w-md w-full text-center">
+            <h3 id="messageTitle" class="text-xl font-bold mb-3 text-red-600">Error</h3>
+            <p id="messageText" class="text-gray-700 mb-4"></p>
+            <button onclick="document.getElementById('messageBox').classList.add('hidden')" class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-lg transition duration-200">
+                Acknowledge
+            </button>
+        </div>
+    </div>
 
     <header class="mb-4 flex justify-between items-center bg-white p-4 rounded-xl shadow-lg">
         <h1 class="text-3xl font-extrabold text-gray-800">Minecraft Structure Analyzer</h1>
@@ -125,25 +138,72 @@
         let currentLayer = 0;
         let isGridVisible = true;
 
+        // --- CUSTOM UI FUNCTIONS ---
+
+        /**
+         * Displays a custom message box (replaces alert()).
+         * @param {string} title - The title of the message box.
+         * @param {string} text - The body content of the message box (can include HTML/Markdown).
+         * @param {boolean} isError - If true, displays error style (red); otherwise, success style (indigo).
+         */
+        function showMessage(title, text, isError = true) {
+            const box = document.getElementById('messageBox');
+            const titleEl = document.getElementById('messageTitle');
+            const textEl = document.getElementById('messageText');
+            const buttonEl = box.querySelector('button');
+
+            titleEl.textContent = title;
+            textEl.innerHTML = text; // Use innerHTML for formatting
+
+            // Toggle colors for error/success states
+            titleEl.classList.toggle('text-red-600', isError);
+            titleEl.classList.toggle('text-indigo-600', !isError);
+            buttonEl.classList.toggle('bg-red-500', isError);
+            buttonEl.classList.toggle('hover:bg-red-600', isError);
+            buttonEl.classList.toggle('bg-indigo-600', !isError);
+            buttonEl.classList.toggle('hover:bg-indigo-700', !isError);
+            
+            box.classList.remove('hidden');
+        }
+
+
         // --- CORE APPLICATION FUNCTIONS ---
 
         /**
-         * Simulates the parsing of the .mcstructure file.
-         * NOTE: In a real app, you would use a library here (like pako + Prismarine-NBT)
-         * to decompress the file and read the NBT tags to extract block positions and types.
+         * Attempts to parse the .mcstructure file (Gzip decompression + NBT mock).
          * @param {ArrayBuffer} buffer - The raw file content.
          * @returns {Promise<object>} - A promise resolving to the structure data.
          */
         async function parseStructure(buffer) {
             document.getElementById('loadingMessage').classList.remove('hidden');
+            let decompressedData;
 
-            // --- REAL-WORLD IMPLEMENTATION REQUIRES COMPLEX CODE HERE ---
-            // 1. Decompress Gzip: const decompressed = pako.inflate(new Uint8Array(buffer));
-            // 2. Parse NBT: const nbtData = nbt.parse(decompressed, { littleEndian: true });
-            // 3. Extract Block Palette and Block Positions from NBT Data
-            // 4. Transform into a simple list of {x, y, z, id, color, layer}
+            try {
+                // Step 1: Decompress Gzip (mcstructure files are Gzip-compressed NBT)
+                const compressedData = new Uint8Array(buffer);
+                
+                // Check if pako is loaded
+                if (typeof pako === 'undefined' || !pako.inflate) {
+                    throw new Error("Pako library (Gzip decompressor) is missing or failed to load.");
+                }
 
-            await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate processing time
+                // Attempt Gzip decompression
+                decompressedData = pako.inflate(compressedData);
+                console.log("File successfully decompressed (Gzip). Decompressed size:", decompressedData.length);
+
+            } catch (e) {
+                // Catch decompression errors (e.g., if the file isn't Gzip-compressed or is corrupted)
+                console.error("Gzip Decompression Failed:", e);
+                // Re-throw a user-friendly error to be caught by handleFileSelect
+                throw new Error(`Decompression Error: The file could not be unpacked. It might be corrupted or not a standard Gzip-compressed format. (${e.message})`);
+            }
+
+            // --- REAL-WORLD NBT PARSING WOULD GO HERE ---
+            // Step 2: NBT Parsing (Requires specialized library, currently mocked)
+            // You would use a library like 'prismarine-nbt' or 'NBTify' here to convert
+            // the decompressedData (raw NBT binary) into a structured JavaScript object.
+            
+            await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate parsing time
 
             // Use the mock data for demonstration
             const data = MOCK_BLOCK_DATA;
@@ -331,13 +391,18 @@
             const file = event.target.files[0];
             if (!file) return;
 
+            // Clear previous selection visually and start loading state
+            document.getElementById('fileInput').value = '';
+            document.getElementById('loadingMessage').classList.remove('hidden');
+
+
             // 1. Read the file content as a binary buffer
             const reader = new FileReader();
             reader.onload = async (e) => {
                 try {
                     const buffer = e.target.result;
-
-                    // 2. Parse the structure data (MOCK)
+                    
+                    // 2. Parse the structure data (Tries Gzip decompression, then uses mock NBT)
                     structureData = await parseStructure(buffer);
 
                     // 3. Update Material List
@@ -352,11 +417,22 @@
 
                     // 5. Build and render the 3D structure
                     buildStructure(structureData);
+                    
+                    document.getElementById('loadingMessage').classList.add('hidden');
+                    showMessage("File Loaded (Mock Data)", `Successfully decompressed the Gzip portion of **${file.name}**. The app is now visualizing the structure using placeholder block data.`, false);
+
+
                 } catch (error) {
-                    console.error("Error processing file:", error);
-                    alert("Error processing file. Please ensure it is a valid .mcstructure file."); // Using alert as a last resort error display
                     document.getElementById('loadingMessage').classList.add('hidden');
                     document.getElementById('emptyState').classList.remove('hidden');
+
+                    console.error("Error processing file:", error);
+                    const errorMessage = `The file **${file.name}** failed to load.
+                    
+                    <p class="text-left mt-3">**Reason:** ${error.message}</p>
+                    <p class="text-left mt-3">The .mcstructure format requires complex Gzip decompression and NBT (Named Binary Tag) parsing. This app is currently able to use placeholder data, but your file appears to have failed the initial decompression step. Please ensure your file is not corrupted and is a valid Bedrock Edition structure file.</p>
+                    `;
+                    showMessage("Structure File Error", errorMessage, true);
                 }
             };
 
