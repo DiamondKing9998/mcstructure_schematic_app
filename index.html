@@ -169,6 +169,13 @@
         const textureManager = new ResourcePackTextureManager('./resource_pack');
 
         let sharedCubeGeometry = null;
+        // Always-available default cube geometry function
+        function getSharedCubeGeometry() {
+            if (!sharedCubeGeometry) {
+                sharedCubeGeometry = new THREE.BoxGeometry(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+            }
+            return sharedCubeGeometry;
+        }
 
         // Three.js Globals
     let scene, camera, renderer, controls, blockGroup, gridHelper;
