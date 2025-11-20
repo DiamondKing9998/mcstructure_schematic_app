@@ -121,9 +121,6 @@
                     <button id="toggleGrid" class="text-xs bg-gray-200 hover:bg-gray-300 text-gray-700 py-1 px-3 rounded-full transition">
                         Show Grid
                     </button>
-                    <button id="toggleVerticalGrid" class="text-xs bg-gray-200 hover:bg-gray-300 text-gray-700 py-1 px-3 rounded-full transition">
-                        Show Vertical Grid
-                    </button>
                 </div>
 
                 <div class="flex gap-2 items-center mb-2">
@@ -167,12 +164,11 @@
         let sharedCubeGeometry = null;
 
         // Three.js Globals
-    let scene, camera, renderer, controls, blockGroup, gridHelper, verticalGridHelper;
+    let scene, camera, renderer, controls, blockGroup, gridHelper;
         let structureData = null;
         let maxLayer = 0;
         let currentLayer = 0;
     let isGridVisible = true;
-    let isVerticalGridVisible = false;
 
         function getSharedCubeGeometry() {
             if (!sharedCubeGeometry) {
@@ -466,28 +462,6 @@
             gridHelper.visible = isGridVisible;
             scene.add(gridHelper);
 
-            // Vertical grid helper
-            if (verticalGridHelper) scene.remove(verticalGridHelper);
-            if (isVerticalGridVisible) {
-                // Create vertical grid lines at each X/Z intersection
-                const { x: sx, y: sy, z: sz } = size;
-                const verts = [];
-                for (let ix = 0; ix <= sx; ix++) {
-                    for (let iz = 0; iz <= sz; iz++) {
-                        verts.push(
-                            ix * BLOCK_SIZE - center.x, 0, iz * BLOCK_SIZE - center.z,
-                            ix * BLOCK_SIZE - center.x, (sy - 1) * BLOCK_SIZE + BLOCK_SIZE, iz * BLOCK_SIZE - center.z
-                        );
-                    }
-                }
-                const vertGeo = new THREE.BufferGeometry();
-                vertGeo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
-                const vertMat = new THREE.LineBasicMaterial({ color: 0x888888, opacity: 0.5, transparent: true });
-                verticalGridHelper = new THREE.LineSegments(vertGeo, vertMat);
-                scene.add(verticalGridHelper);
-            } else {
-                verticalGridHelper = null;
-            }
 
             // Recenter camera view
             controls.target.set(0, size.y * BLOCK_SIZE / 2, 0);
@@ -947,15 +921,6 @@
                 });
             } else {
                 console.warn("#toggleGrid element not found in DOM.");
-            }
-            const toggleVerticalGridButton = document.getElementById('toggleVerticalGrid');
-            if (toggleVerticalGridButton) {
-                toggleVerticalGridButton.addEventListener('click', () => {
-                    isVerticalGridVisible = !isVerticalGridVisible;
-                    if (structureData) buildStructure(structureData);
-                    toggleVerticalGridButton.textContent = isVerticalGridVisible ? 'Hide Vertical Grid' : 'Show Vertical Grid';
-                    console.log(`Vertical grid visibility toggled to: ${isVerticalGridVisible}`);
-                });
             }
         };
     </script>
