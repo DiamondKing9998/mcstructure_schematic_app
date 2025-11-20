@@ -405,6 +405,14 @@
             ctx.strokeStyle = '#2b3440'; // darker, higher contrast
             for (let i = 0; i < cellInfo.length; i++) {
                 const c = cellInfo[i];
+                // compute corresponding grid x/z from stored index (we stored them in row-major order)
+                const cellIndex = i; // index in cellInfo which follows z-major iteration
+                const z = Math.floor(cellIndex / sx);
+                const x = cellIndex % sx;
+                const b = grid[z][x];
+                const paletteEntry = b ? palette[b.paletteIndex] : null;
+                const borderColor = getCellBorderColor(b, paletteEntry);
+                ctx.strokeStyle = borderColor;
                 // use 0.5 offset to align crisp pixel strokes on canvas
                 ctx.strokeRect(c.xPx + 0.5, c.yPx + 0.5, c.cellW - 1, c.cellH - 1);
             }
@@ -467,6 +475,30 @@
             let hash = 0; for (let i=0; i<str.length; i++) hash = str.charCodeAt(i) + ((hash<<5)-hash);
             const c = (hash & 0x00FFFFFF).toString(16).toUpperCase();
             return '#'+('00000'.substring(0,6-c.length))+c;
+        }
+
+        // Determine border color for a cell based on its block type and states
+        function getCellBorderColor(block, paletteEntry) {
+            // air: subtle gray
+            if (!block || !paletteEntry) return '#9CA3AF';
+            const name = (paletteEntry.name || paletteEntry.block || '').toLowerCase();
+            const states = paletteEntry.states || {};
+            // Slabs: different color for top vs bottom
+            if (name.includes('slab')) {
+                // Bedrock/Java names can use 'type' or 'half' or 'upper'
+                const t = states.type || states.half || states.shape || states.waterlogged || '';
+                // if 'top' or 'upper' appears, treat as top slab
+                if (String(t).toLowerCase().includes('top') || String(t).toLowerCase().includes('upper')) return '#f59e0b'; // amber for top slab
+                return '#d97706'; // darker amber for bottom slab
+            }
+            // Stairs: teal
+            if (name.includes('stair')) return '#06b6d4';
+            // Panes/bars/fences: purple
+            if (name.includes('pane') || name.includes('bar') || name.includes('fence')) return '#7c3aed';
+            // Buttons, pressure plates, thin blocks: orange
+            if (name.includes('button') || name.includes('pressure_plate') || name.includes('trapdoor')) return '#ea580c';
+            // Full cube / default: dark slate
+            return '#2b3440';
         }
 
         // Hook up 2D grid to structure load and layer input
