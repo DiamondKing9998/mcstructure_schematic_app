@@ -175,6 +175,7 @@
          * @returns {Promise<object>} - A promise resolving to the structure data.
          */
         async function parseStructure(buffer) {
+            console.log("--- Starting parseStructure (Step 2: Decompression) ---");
             document.getElementById('loadingMessage').classList.remove('hidden');
             let decompressedData;
 
@@ -184,12 +185,13 @@
                 
                 // Check if pako is loaded
                 if (typeof pako === 'undefined' || !pako.inflate) {
+                    console.error("Dependency Error: Pako library not loaded.");
                     throw new Error("Pako library (Gzip decompressor) is missing or failed to load.");
                 }
 
                 // Attempt Gzip decompression
                 decompressedData = pako.inflate(compressedData);
-                console.log("File successfully decompressed (Gzip). Decompressed size:", decompressedData.length);
+                console.log(`Success: File decompressed. Size (Compressed: ${compressedData.length} bytes, Decompressed: ${decompressedData.length} bytes).`);
 
             } catch (e) {
                 // Catch decompression errors (e.g., if the file isn't Gzip-compressed or is corrupted)
@@ -197,11 +199,10 @@
                 // Re-throw a user-friendly error to be caught by handleFileSelect
                 throw new Error(`Decompression Error: The file could not be unpacked. It might be corrupted or not a standard Gzip-compressed format. (${e.message})`);
             }
-
+            
             // --- REAL-WORLD NBT PARSING WOULD GO HERE ---
             // Step 2: NBT Parsing (Requires specialized library, currently mocked)
-            // You would use a library like 'prismarine-nbt' or 'NBTify' here to convert
-            // the decompressedData (raw NBT binary) into a structured JavaScript object.
+            console.log("Starting Step 3: NBT Parsing (MOCK) - Simulate binary parsing to extract block data.");
             
             await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate parsing time
 
@@ -209,6 +210,9 @@
             const data = MOCK_BLOCK_DATA;
             maxLayer = data.size.y - 1;
             currentLayer = maxLayer;
+            
+            console.log("MOCK Data Loaded. Structure Size:", data.size);
+            console.log("--- parseStructure Complete ---");
 
             document.getElementById('loadingMessage').classList.add('hidden');
             document.getElementById('emptyState').classList.add('hidden');
@@ -222,6 +226,7 @@
          * @param {object} materials - A map of block ID to count.
          */
         function displayMaterialList(materials) {
+            console.log("Building Material List.");
             const listContainer = document.getElementById('material-list');
             listContainer.innerHTML = '';
             document.getElementById('materialEmpty').classList.add('hidden');
@@ -230,11 +235,13 @@
 
             if (sortedMaterials.length === 0) {
                 listContainer.innerHTML = '<p class="text-sm text-gray-500">No solid blocks found in the structure data.</p>';
+                console.warn("Material list is empty.");
                 return;
             }
 
             sortedMaterials.forEach(([id, count]) => {
                 const totalStacks = Math.ceil(count / STACK_SIZE);
+                // ... rest of list generation logic ...
                 const stacksDisplay = `${totalStacks} stack${totalStacks !== 1 ? 's' : ''}`;
                 const baseId = id.split(':')[1] || id; // Clean up the ID for display
 
@@ -249,12 +256,14 @@
                 `;
                 listContainer.appendChild(listItem);
             });
+            console.log(`Material list built with ${sortedMaterials.length} unique items.`);
         }
 
         /**
          * Initializes the Three.js scene, camera, and controls.
          */
         function initThreeJS() {
+            // ... Three.js initialization logic (unchanged)
             const container = document.getElementById('canvas-container');
             const width = container.clientWidth;
             const height = container.clientHeight;
@@ -295,8 +304,10 @@
 
             // Handle window resize
             window.addEventListener('resize', onWindowResize, false);
+            console.log("Three.js environment initialized.");
         }
 
+        // ... other Three.js functions (animate, onWindowResize, buildStructure, filterByLayer) ...
         /**
          * Resizes the Three.js renderer and camera.
          */
@@ -324,6 +335,7 @@
          * @param {object} data - The parsed structure data.
          */
         function buildStructure(data) {
+            console.log("Building 3D structure visualization.");
             // Clear existing blocks
             while (blockGroup.children.length > 0) {
                 blockGroup.remove(blockGroup.children[0]);
@@ -362,6 +374,7 @@
             // Recenter camera view to the structure
             controls.target.set(0, size.y * BLOCK_SIZE / 2, 0);
             controls.update();
+            console.log(`3D structure built. Dimensions: ${size.x}x${size.y}x${size.z}`);
         }
 
         /**
@@ -371,6 +384,7 @@
         function filterByLayer(layer) {
             currentLayer = layer;
             document.getElementById('currentLayerDisplay').textContent = layer === maxLayer ? 'All' : layer;
+            console.log(`Layer filter set to: ${layer}`);
 
             if (!blockGroup) return;
 
@@ -389,7 +403,12 @@
          */
         async function handleFileSelect(event) {
             const file = event.target.files[0];
-            if (!file) return;
+            if (!file) {
+                console.log("File selection cancelled.");
+                return;
+            }
+            
+            console.log(`Starting file processing for: ${file.name} (${file.size} bytes)`);
 
             // Clear previous selection visually and start loading state
             document.getElementById('fileInput').value = '';
@@ -399,13 +418,14 @@
             // 1. Read the file content as a binary buffer
             const reader = new FileReader();
             reader.onload = async (e) => {
+                console.log("FileReader completed reading file into ArrayBuffer.");
                 try {
                     const buffer = e.target.result;
                     
                     // 2. Parse the structure data (Tries Gzip decompression, then uses mock NBT)
                     structureData = await parseStructure(buffer);
 
-                    // 3. Update Material List
+                    // 3. Update UI elements
                     displayMaterialList(structureData.materials);
 
                     // 4. Update Layer Slider
@@ -426,7 +446,7 @@
                     document.getElementById('loadingMessage').classList.add('hidden');
                     document.getElementById('emptyState').classList.remove('hidden');
 
-                    console.error("Error processing file:", error);
+                    console.error("Critical File Processing Error:", error);
                     const errorMessage = `The file **${file.name}** failed to load.
                     
                     <p class="text-left mt-3">**Reason:** ${error.message}</p>
@@ -434,6 +454,12 @@
                     `;
                     showMessage("Structure File Error", errorMessage, true);
                 }
+            };
+            
+            reader.onerror = (e) => {
+                console.error("FileReader Error:", e);
+                document.getElementById('loadingMessage').classList.add('hidden');
+                showMessage("File Read Error", "The browser could not read the file. This might be due to file permissions or corruption.", true);
             };
 
             reader.readAsArrayBuffer(file);
@@ -443,6 +469,7 @@
 
         // Wait for the window to load before starting Three.js
         window.onload = function () {
+            console.log("Application started. Initializing Three.js.");
             initThreeJS();
             animate();
 
@@ -459,6 +486,7 @@
                 isGridVisible = !isGridVisible;
                 gridHelper.visible = isGridVisible;
                 toggleGridButton.textContent = isGridVisible ? 'Hide Grid' : 'Show Grid';
+                console.log(`Grid visibility toggled to: ${isGridVisible}`);
             });
         };
     </script>
