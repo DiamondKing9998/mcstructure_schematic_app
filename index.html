@@ -403,9 +403,15 @@
 
             // Create a mesh per block (simpler and less error-prone). Skip air entries to avoid invisible overdraw.
             let skippedAir = 0;
+            let skippedOther = 0;
+            let renderedBlocks = 0;
             blocks.forEach((block) => {
                 const paletteEntry = (palette && palette[block.paletteIndex]) || null;
                 const entryName = (paletteEntry && paletteEntry.name) ? String(paletteEntry.name).toLowerCase() : '';
+                if (!paletteEntry) {
+                    skippedOther++;
+                    return;
+                }
                 // If this palette entry is air, skip creating a mesh for it
                 if (/(^|:)air$/.test(entryName)) {
                     skippedAir++;
@@ -427,8 +433,11 @@
                 );
                 mesh.userData = { layer: block.y };
                 blockGroup.add(mesh);
+                renderedBlocks++;
             });
+            console.log(`[DEBUG] buildStructure: Rendered blocks: ${renderedBlocks}, Skipped air: ${skippedAir}, Skipped other: ${skippedOther}, Total input blocks: ${blocks.length}`);
             if (skippedAir > 0) console.log(`Skipped creating ${skippedAir} air meshes during buildStructure.`);
+            if (skippedOther > 0) console.log(`Skipped creating ${skippedOther} blocks due to missing palette entry.`);
 
             // Adjust grid size
             scene.remove(gridHelper);
