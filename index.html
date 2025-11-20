@@ -190,7 +190,7 @@
                     <span class="font-medium text-gray-800">${baseId.replace(/_/g, ' ').toUpperCase()}</span>
                     <div class="text-right">
                         <span class="block text-sm font-bold text-indigo-600">${stacksDisplay}</span>
-                        <span class="block text-xs text-gray-500">${count} total (Mocked)</span>
+                        <span class="block text-xs text-gray-500">${count} blocks</span>
                     </div>
                 `;
                 if (listContainer) {
@@ -356,7 +356,7 @@
                     structureData = await parseMCStructureBinary(buffer);
 
                     // Update global state based on parsed data
-                    maxLayer = structureData.size.y - 1;
+                    maxLayer = Math.max(structureData.size.y - 1, 0);
                     currentLayer = maxLayer;
 
 
@@ -381,9 +381,9 @@
                     if (emptyStateEl) {
                         emptyStateEl.classList.add('hidden');
                     }
-                    showMessage("Parsing Attempt Complete", 
-                        `The NBT Parser successfully processed **${file.name}**!
-                        <p class="text-left mt-3">The block data and material list are still mocked, but the binary structure checks (Gzip and NBT Format Version) passed.</p>`, 
+                    showMessage("Parsing Complete", 
+                        `The structure **${file.name}** was parsed successfully.
+                        <p class="text-left mt-3">The material list now reflects the real block palette counts, grouped by block name and rounded up to 64-block stacks.</p>`, 
                         false);
 
                 } catch (error) {

@@ -43,17 +43,69 @@ export async function parseMCStructureBinary(buffer) {
 
     console.log("Step 2: Attempting NBT Binary Parsing (Including Header Check)...");
     try {
-        parsedStructureData = NBT.parse(decompressedData.buffer);
+        parsedStructureData = NBT.parse(decompressedData);
     } catch (e) {
         console.error("NBT Parser: NBT Parsing Failed.", e);
         throw new Error(`NBT Parsing Error: Failed to read Minecraft NBT structure data. The file format seems invalid after integrity checks. (${e.message})`);
     }
 
     console.log("--- NBT Parser: All Integrity Checks Passed! ---");
-    return parsedStructureData;
+    return transformStructure(parsedStructureData);
 }
 
+function normalizeSize(sizeList = []) {
+    return {
+        x: Number(sizeList[0] ?? 0),
+        y: Number(sizeList[1] ?? 0),
+        z: Number(sizeList[2] ?? 0),
+    };
+}
 
-// MOCK_BLOCK_DATA is no longer needed here as the NBT.parse mock handles it.
-// We export an empty object so the main module can still import MOCK_BLOCK_DATA without error.
-export const MOCK_BLOCK_DATA = {};
+function toNumber(value) {
+    if (typeof value === 'number') return value;
+    if (typeof value === 'bigint') return Number(value);
+    return Number(value ?? 0);
+}
+
+function buildMaterialCounts(structureSection) {
+    if (!structureSection) {
+        return {};
+    }
+
+    const palette = structureSection.palette?.default?.block_palette ?? [];
+    const paletteNames = palette.map((entry) => (entry?.name ?? 'unknown').toLowerCase());
+
+    const counts = Object.create(null);
+    const blockIndexLayers = structureSection.block_indices ?? [];
+
+    blockIndexLayers.forEach((layer) => {
+        if (!Array.isArray(layer)) return;
+        layer.forEach((rawIndex) => {
+            const index = toNumber(rawIndex);
+            if (!Number.isFinite(index) || index < 0 || index >= paletteNames.length) {
+                return;
+            }
+            const blockName = paletteNames[index];
+            if (!blockName || blockName === 'minecraft:air') {
+                return;
+            }
+            counts[blockName] = (counts[blockName] || 0) + 1;
+        });
+    });
+
+    return counts;
+}
+
+function transformStructure(rootCompound) {
+    const size = normalizeSize(rootCompound.size);
+    const structureSection = rootCompound.structure ?? {};
+
+    const materials = buildMaterialCounts(structureSection);
+
+    return {
+        size,
+        materials,
+        blocks: [], // Placeholder until full block reconstruction is implemented.
+        raw: rootCompound,
+    };
+}
