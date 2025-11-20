@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCStructure Analyzer &amp; 3D Visualizer</title>
+    <!-- Load Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Load Three.js for 3D rendering -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Load OrbitControls for camera interaction -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <style>
+        /* Custom styles for better aesthetics and layout */
+        body { font-family: 'Inter', sans-serif; background-color: #f7f9fb; }
+        .grid-container {
+            display: grid;
+            grid-template-columns: 1fr 300px; /* 3D view | Sidebar */
+            height: calc(100vh - 80px); /* Account for header/padding */
+        }
+        #canvas-container {
+            position: relative;
+            background: linear-gradient(135deg, #1f2937, #374151); /* Dark background for 3D */
+            border-radius: 0.75rem;
+            overflow: hidden;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+        }
+        #material-list {
+            max-height: calc(100vh - 200px);
+            overflow-y: auto;
+            scrollbar-width: thin;
+        }
+        /* Custom Scrollbar for dark theme */
+        #material-list::-webkit-scrollbar { width: 8px; }
+        #material-list::-webkit-scrollbar-thumb { background-color: #6b7280; border-radius: 4px; }
+        #material-list::-webkit-scrollbar-track { background-color: #1f2937; }
+
+        /* The canvas itself will be appended here */
+        canvas { display: block; }
+    </style>
+</head>
+<body class="p-4">
+
+    <header class="mb-4 flex justify-between items-center bg-white p-4 rounded-xl shadow-lg">
+        <h1 class="text-3xl font-extrabold text-gray-800">Minecraft Structure Analyzer</h1>
+        <input type="file" id="fileInput" accept=".mcstructure" class="hidden" onchange="handleFileSelect(event)">
+        <label for="fileInput" class="cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-6 rounded-lg transition duration-300 shadow-md hover:shadow-lg transform hover:scale-105">
+            Load .mcstructure File
+        </label>
+    </header>
+
+    <main id="app-container" class="grid-container gap-4">
+        <!-- 3D Visualizer Container -->
+        <div id="canvas-container" class="p-2">
+            <div id="loadingMessage" class="absolute inset-0 flex items-center justify-center text-white text-xl bg-gray-900 bg-opacity-80 transition duration-500 z-10 hidden">
+                Parsing structure and calculating materials...
+            </div>
+            <div id="emptyState" class="absolute inset-0 flex items-center justify-center text-white text-xl bg-gray-800 transition duration-500 z-10">
+                Upload a .mcstructure file to begin visualization.
+            </div>
+        </div>
+
+        <!-- Sidebar for Controls and Material List -->
+        <aside class="bg-white p-5 rounded-xl shadow-lg flex flex-col">
+            <h2 class="text-xl font-bold mb-3 text-gray-700">Structure Details</h2>
+
+            <!-- Layer Filter Controls -->
+            <div id="layerControls" class="mb-5 p-3 bg-gray-50 rounded-lg border border-gray-200 hidden">
+                <h3 class="font-semibold text-lg mb-2 text-gray-700">Layer Filter (Y-Axis)</h3>
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-sm font-medium text-gray-600">Current Layer: <span id="currentLayerDisplay">All</span></span>
+                    <button id="toggleGrid" class="text-xs bg-gray-200 hover:bg-gray-300 text-gray-700 py-1 px-3 rounded-full transition">
+                        Show Grid
+                    </button>
+                </div>
+                <input type="range" id="layerSlider" min="0" max="10" value="0" step="1" class="w-full h-2 bg-indigo-200 rounded-lg appearance-none cursor-pointer range-lg">
+            </div>
+
+            <!-- Material List -->
+            <h3 class="font-semibold text-lg mb-3 text-gray-700 border-t pt-3 mt-auto">Material List (64/Stack)</h3>
+            <div id="material-list" class="flex-grow p-2 bg-gray-50 rounded-lg">
+                <p id="materialEmpty" class="text-sm text-gray-500">Materials will appear here after loading.</p>
+            </div>
+        </aside>
+    </main>
+
+    <script>
+        // --- CONSTANTS AND GLOBALS ---
+        const BLOCK_SIZE = 1; // Size of one Minecraft block in Three.js units
+        const STACK_SIZE = 64;
+
+        // Mock Block Data for visualization and material calculation (replace with NBT parsing output)
+        const MOCK_BLOCK_DATA = {
+            materials: {
+                'minecraft:stone': 512,
+                'minecraft:cobblestone': 256,
+                'minecraft:dirt': 128,
+                'minecraft:planks:2': 64, // E.g., Spruce Planks
+                'minecraft:glass': 32,
+                'minecraft:beacon': 1,
+            },
+            blocks: [
+                // Mock block structure (x, y, z, block_id, color_hex, layer_index)
+                // y is the layer index
+                { x: 0, y: 0, z: 0, id: 'minecraft:stone', color: 0x888888, layer: 0 },
+                { x: 1, y: 0, z: 0, id: 'minecraft:stone', color: 0x888888, layer: 0 },
+                { x: 2, y: 0, z: 0, id: 'minecraft:stone', color: 0x888888, layer: 0 },
+                { x: 1, y: 1, z: 1, id: 'minecraft:dirt', color: 0x964b00, layer: 1 },
+                { x: 2, y: 1, z: 2, id: 'minecraft:glass', color: 0x00ffff, layer: 1 },
+                { x: 0, y: 2, z: 1, id: 'minecraft:beacon', color: 0xff0000, layer: 2 },
+                { x: 1, y: 2, z: 1, id: 'minecraft:planks:2', color: 0xa0522d, layer: 2 },
+                // Add more blocks...
+                { x: 0, y: 3, z: 0, id: 'minecraft:cobblestone', color: 0x555555, layer: 3 },
+                { x: 1, y: 3, z: 0, id: 'minecraft:cobblestone', color: 0x555555, layer: 3 },
+                { x: 0, y: 4, z: 0, id: 'minecraft:cobblestone', color: 0x555555, layer: 4 },
+                { x: 1, y: 4, z: 0, id: 'minecraft:cobblestone', color: 0x555555, layer: 4 },
+            ],
+            size: { x: 3, y: 5, z: 3 } // Max dimensions
+        };
+
+        // Three.js Globals
+        let scene, camera, renderer, controls, blockGroup, gridHelper;
+        let structureData = null;
+        let maxLayer = 0;
+        let currentLayer = 0;
+        let isGridVisible = true;
+
+        // --- CORE APPLICATION FUNCTIONS ---
+
+        /**
+         * Simulates the parsing of the .mcstructure file.
+         * NOTE: In a real app, you would use a library here (like pako + Prismarine-NBT)
+         * to decompress the file and read the NBT tags to extract block positions and types.
+         * @param {ArrayBuffer} buffer - The raw file content.
+         * @returns {Promise<object>} - A promise resolving to the structure data.
+         */
+        async function parseStructure(buffer) {
+            document.getElementById('loadingMessage').classList.remove('hidden');
+
+            // --- REAL-WORLD IMPLEMENTATION REQUIRES COMPLEX CODE HERE ---
+            // 1. Decompress Gzip: const decompressed = pako.inflate(new Uint8Array(buffer));
+            // 2. Parse NBT: const nbtData = nbt.parse(decompressed, { littleEndian: true });
+            // 3. Extract Block Palette and Block Positions from NBT Data
+            // 4. Transform into a simple list of {x, y, z, id, color, layer}
+
+            await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate processing time
+
+            // Use the mock data for demonstration
+            const data = MOCK_BLOCK_DATA;
+            maxLayer = data.size.y - 1;
+            currentLayer = maxLayer;
+
+            document.getElementById('loadingMessage').classList.add('hidden');
+            document.getElementById('emptyState').classList.add('hidden');
+            document.getElementById('layerControls').classList.remove('hidden');
+
+            return data;
+        }
+
+        /**
+         * Calculates material counts, rounds them up to stacks, and displays the list.
+         * @param {object} materials - A map of block ID to count.
+         */
+        function displayMaterialList(materials) {
+            const listContainer = document.getElementById('material-list');
+            listContainer.innerHTML = '';
+            document.getElementById('materialEmpty').classList.add('hidden');
+
+            const sortedMaterials = Object.entries(materials).sort(([, a], [, b]) => b - a);
+
+            if (sortedMaterials.length === 0) {
+                listContainer.innerHTML = '<p class="text-sm text-gray-500">No solid blocks found in the structure data.</p>';
+                return;
+            }
+
+            sortedMaterials.forEach(([id, count]) => {
+                const totalStacks = Math.ceil(count / STACK_SIZE);
+                const stacksDisplay = `${totalStacks} stack${totalStacks !== 1 ? 's' : ''}`;
+                const baseId = id.split(':')[1] || id; // Clean up the ID for display
+
+                const listItem = document.createElement('div');
+                listItem.className = 'flex justify-between items-center p-2 mb-1 bg-white rounded-md shadow-sm border-l-4 border-indigo-400';
+                listItem.innerHTML = `
+                    <span class="font-medium text-gray-800">${baseId.replace(/_/g, ' ').toUpperCase()}</span>
+                    <div class="text-right">
+                        <span class="block text-sm font-bold text-indigo-600">${stacksDisplay}</span>
+                        <span class="block text-xs text-gray-500">${count} total</span>
+                    </div>
+                `;
+                listContainer.appendChild(listItem);
+            });
+        }
+
+        /**
+         * Initializes the Three.js scene, camera, and controls.
+         */
+        function initThreeJS() {
+            const container = document.getElementById('canvas-container');
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+
+            // Scene
+            scene = new THREE.Scene();
+
+            // Camera
+            camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
+            camera.position.set(20, 20, 20);
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(width, height);
+            container.appendChild(renderer.domElement);
+
+            // Controls
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true; // smooth rotation
+            controls.dampingFactor = 0.05;
+            controls.minDistance = 5;
+            controls.maxDistance = 100;
+
+            // Lighting
+            scene.add(new THREE.AmbientLight(0x404040)); // Soft white light
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(10, 10, 10);
+            scene.add(directionalLight);
+
+            // Group to hold all blocks
+            blockGroup = new THREE.Group();
+            scene.add(blockGroup);
+
+            // Grid Helper (initially large, resized later)
+            gridHelper = new THREE.GridHelper(50, 50, 0x444444, 0x444444);
+            gridHelper.position.y = -BLOCK_SIZE / 2; // Place slightly below the first layer
+            scene.add(gridHelper);
+
+            // Handle window resize
+            window.addEventListener('resize', onWindowResize, false);
+        }
+
+        /**
+         * Resizes the Three.js renderer and camera.
+         */
+        function onWindowResize() {
+            const container = document.getElementById('canvas-container');
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+
+            camera.aspect = width / height;
+            camera.updateProjectionMatrix();
+            renderer.setSize(width, height);
+        }
+
+        /**
+         * The main render loop.
+         */
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update(); // only required if controls.enableDamping = true
+            renderer.render(scene, camera);
+        }
+
+        /**
+         * Draws all blocks from the structure data in 3D.
+         * @param {object} data - The parsed structure data.
+         */
+        function buildStructure(data) {
+            // Clear existing blocks
+            while (blockGroup.children.length > 0) {
+                blockGroup.remove(blockGroup.children[0]);
+            }
+
+            const { blocks, size } = data;
+            const center = { x: (size.x - 1) * BLOCK_SIZE / 2, y: 0, z: (size.z - 1) * BLOCK_SIZE / 2 };
+
+            const geometry = new THREE.BoxGeometry(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+
+            blocks.forEach(block => {
+                // Instancing is better for performance, but simple Mesh approach here for clarity
+                const material = new THREE.MeshLambertMaterial({ color: block.color });
+                const mesh = new THREE.Mesh(geometry, material);
+
+                // Position the block, centered in the scene
+                mesh.position.set(
+                    block.x * BLOCK_SIZE - center.x,
+                    block.y * BLOCK_SIZE + BLOCK_SIZE / 2,
+                    block.z * BLOCK_SIZE - center.z
+                );
+                // Store metadata for filtering
+                mesh.userData = { layer: block.layer };
+
+                blockGroup.add(mesh);
+            });
+
+            // Adjust grid size to structure size
+            scene.remove(gridHelper);
+            const gridRange = Math.max(size.x, size.z) * BLOCK_SIZE;
+            gridHelper = new THREE.GridHelper(gridRange, gridRange, 0x444444, 0x444444);
+            gridHelper.position.y = -BLOCK_SIZE / 2;
+            gridHelper.visible = isGridVisible;
+            scene.add(gridHelper);
+
+            // Recenter camera view to the structure
+            controls.target.set(0, size.y * BLOCK_SIZE / 2, 0);
+            controls.update();
+        }
+
+        /**
+         * Filters the 3D visualization to show only blocks up to the selected layer.
+         * @param {number} layer - The maximum layer index to display.
+         */
+        function filterByLayer(layer) {
+            currentLayer = layer;
+            document.getElementById('currentLayerDisplay').textContent = layer === maxLayer ? 'All' : layer;
+
+            if (!blockGroup) return;
+
+            blockGroup.children.forEach(mesh => {
+                const blockLayer = mesh.userData.layer;
+                // Show the block if its layer index is less than or equal to the current filter layer
+                mesh.visible = blockLayer <= currentLayer;
+            });
+        }
+
+        // --- EVENT HANDLERS ---
+
+        /**
+         * Main entry point for file processing.
+         * @param {Event} event - The file input change event.
+         */
+        async function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            // 1. Read the file content as a binary buffer
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                try {
+                    const buffer = e.target.result;
+
+                    // 2. Parse the structure data (MOCK)
+                    structureData = await parseStructure(buffer);
+
+                    // 3. Update Material List
+                    displayMaterialList(structureData.materials);
+
+                    // 4. Update Layer Slider
+                    const slider = document.getElementById('layerSlider');
+                    slider.min = 0;
+                    slider.max = maxLayer;
+                    slider.value = maxLayer; // Default to showing all layers
+                    document.getElementById('currentLayerDisplay').textContent = 'All';
+
+                    // 5. Build and render the 3D structure
+                    buildStructure(structureData);
+                } catch (error) {
+                    console.error("Error processing file:", error);
+                    alert("Error processing file. Please ensure it is a valid .mcstructure file."); // Using alert as a last resort error display
+                    document.getElementById('loadingMessage').classList.add('hidden');
+                    document.getElementById('emptyState').classList.remove('hidden');
+                }
+            };
+
+            reader.readAsArrayBuffer(file);
+        }
+
+        // --- INITIALIZATION ---
+
+        // Wait for the window to load before starting Three.js
+        window.onload = function () {
+            initThreeJS();
+            animate();
+
+            // Set up Layer Slider Listener
+            const slider = document.getElementById('layerSlider');
+            slider.addEventListener('input', (e) => {
+                const layer = parseInt(e.target.value, 10);
+                filterByLayer(layer);
+            });
+
+            // Set up Grid Toggle Listener
+            const toggleGridButton = document.getElementById('toggleGrid');
+            toggleGridButton.addEventListener('click', () => {
+                isGridVisible = !isGridVisible;
+                gridHelper.visible = isGridVisible;
+                toggleGridButton.textContent = isGridVisible ? 'Hide Grid' : 'Show Grid';
+            });
+        };
+    </script>
+</body>
+</html>
