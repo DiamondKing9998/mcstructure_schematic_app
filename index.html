@@ -436,14 +436,29 @@
                 if (gx >= 0 && gx < sx && gz >= 0 && gz < sz) {
                     const b = grid[gz][gx];
                     let html = `<b>Block:</b> `;
+                    let slabDebug = '';
+                    let borderColor = '';
                     if (b) {
                         const p = palette[b.paletteIndex];
                         html += (p?.name || 'unknown').replace('minecraft:', '');
                         if (p?.states && Object.keys(p.states).length) {
                             html += `<br><b>Data:</b> ` + Object.entries(p.states).map(([k, v]) => `${k}: ${v}`).join(', ');
                         }
+                        // Slab debug info
+                        if ((p?.name || '').toLowerCase().includes('slab')) {
+                            borderColor = getCellBorderColor(b, p);
+                            const t = (p.states?.type || p.states?.half || p.states?.shape || '').toLowerCase();
+                            let slabType = 'unknown';
+                            if (t.includes('top') || t.includes('upper')) slabType = 'top';
+                            else if (t.includes('bottom') || t.includes('lower')) slabType = 'bottom';
+                            else if (t.includes('double')) slabType = 'double';
+                            slabDebug = `<br><b>SlabType:</b> ${slabType} <span style="color:${borderColor}">●</span> <br><b>Border:</b> ${borderColor}`;
+                            // Log to console for debug
+                            console.log('Slab cell debug:', {gx, gz, name: p.name, states: p.states, slabType, borderColor});
+                        }
                     } else html += 'air';
                     html += `<br><b>Coords:</b> (${gx}, ${gz})`;
+                    if (slabDebug) html += slabDebug;
                     tooltip.innerHTML = html;
                     tooltip.style.display = 'block';
 
