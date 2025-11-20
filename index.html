@@ -107,8 +107,9 @@
                 <input id="layer2dInput" type="number" min="0" value="0" class="w-20 p-1 rounded border border-gray-300 text-sm" />
                 <span id="layer2dInfo" class="text-xs text-gray-500"></span>
             </div>
-            <div style="position:relative;">
-                <canvas id="layer2d-canvas" width="400" height="400" style="border:1px solid #d1d5db; background:#f3f4f6; cursor:crosshair;"></canvas>
+            <div id="layer2d-canvas-wrap" style="position:relative; width:100%;">
+                <!-- Remove fixed width/height attributes so CSS and JS can control the canvas sizing responsively -->
+                <canvas id="layer2d-canvas" style="width:100%; height:100%; border:1px solid #d1d5db; background:#f3f4f6; cursor:crosshair; display:block;"></canvas>
                 <div id="layer2d-tooltip" style="display:none; position:absolute; pointer-events:none; background:rgba(30,41,59,0.95); color:#fff; font-size:13px; padding:6px 10px; border-radius:8px; z-index:20; min-width:120px;"></div>
             </div>
         </div>
@@ -844,6 +845,8 @@
                         console.warn('Failed to preload palette previews', e);
                     }
 
+                    // Size the 2D canvas now that we know structure dimensions and previews
+                    try { if (typeof window.sizeLayer2DCanvas === 'function') window.sizeLayer2DCanvas(); } catch(e) {}
                     // Update 2D grid view
                     update2DLayerGridAfterLoad();
 
@@ -936,20 +939,34 @@
             // 2D Layer Grid setup
             setup2DLayerGrid();
 
-            // Resize 2D grid canvas on window resize
-            window.addEventListener('resize', () => {
+            // Helper to size the 2D canvas to its container and account for devicePixelRatio
+            function sizeLayer2DCanvas() {
                 const canvas = document.getElementById('layer2d-canvas');
-                if (canvas) {
-                    // Set to parent size or default 400x400
-                    const parent = canvas.parentElement;
-                    if (parent) {
-                        const size = Math.min(parent.clientWidth, 500);
-                        canvas.width = size;
-                        canvas.height = size;
-                    }
-                    render2DLayerGrid();
-                }
+                const wrap = document.getElementById('layer2d-canvas-wrap');
+                if (!canvas || !wrap) return;
+                // Compute CSS size based on wrap width and keep a square aspect ratio matching 3D area width
+                const cssWidth = Math.max(200, Math.min(wrap.clientWidth, window.innerWidth * 0.9));
+                const cssHeight = cssWidth; // keep square for top-down view
+                // device pixel ratio for crisp rendering
+                const dpr = window.devicePixelRatio || 1;
+                canvas.style.width = cssWidth + 'px';
+                canvas.style.height = cssHeight + 'px';
+                canvas.width = Math.floor(cssWidth * dpr);
+                canvas.height = Math.floor(cssHeight * dpr);
+                // Ensure the context transform is reset by render2DLayerGrid which sets transform
+                render2DLayerGrid();
+            }
+
+            // Size on load and on resize
+            window.addEventListener('resize', () => {
+                sizeLayer2DCanvas();
             });
+
+            // Also expose sizing so other code can call it after structure loads
+            window.sizeLayer2DCanvas = sizeLayer2DCanvas;
+
+            // Initial sizing
+            sizeLayer2DCanvas();
 
             console.log("Application started. Initializing Three.js.");
             initThreeJS();
