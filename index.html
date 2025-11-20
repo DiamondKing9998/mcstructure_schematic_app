@@ -539,6 +539,8 @@
                     
                     // Call the dedicated parsing module
                     structureData = await parseMCStructureBinary(buffer);
+                    // Expose last parsed structure for debugging in the console
+                    try { window._lastStructureData = structureData; } catch (e) { /* ignore */ }
 
                     // Update global state based on parsed data
                     maxLayer = Math.max(structureData.size.y - 1, 0);
@@ -688,6 +690,22 @@
                     }));
                     console.log(`Mesh[${meshIdx}] layer=${mesh.userData?.layer} materials=${mats.length}`, matInfo);
                 });
+            };
+
+            // Inspect the last parsed structure blocks for diagnostics
+            window.inspectStructureBlocks = function() {
+                const data = window._lastStructureData;
+                if (!data) { console.warn('No structure data available (load a file first).'); return; }
+                const totalBlocks = Array.isArray(data.blocks) ? data.blocks.length : 0;
+                const byPalette = {};
+                const byLayer = {};
+                (data.blocks || []).forEach(b => {
+                    byPalette[b.paletteIndex] = (byPalette[b.paletteIndex] || 0) + 1;
+                    byLayer[b.y] = (byLayer[b.y] || 0) + 1;
+                });
+                console.log('Structure summary: size=', data.size, 'totalBlocks=', totalBlocks);
+                console.log('Blocks by palette index (first 50):', Object.entries(byPalette).slice(0,50));
+                console.log('Blocks by Y layer (first 50):', Object.entries(byLayer).slice(0,50));
             };
 
             // Expose a helper to dump the palette visuals (which textures each palette entry resolved to)
