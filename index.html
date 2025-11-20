@@ -10,6 +10,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <!-- Load OrbitControls for camera interaction -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <!-- Load JSZip for user-provided Bedrock packs -->
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
     <!-- Load Pako for Gzip decompression (Required for Step 1) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako_inflate.min.js"></script>
     <style>
@@ -49,6 +51,10 @@
             object-fit: cover;
             image-rendering: pixelated;
         }
+        #packStatus {
+            font-size: 0.85rem;
+            color: #4b5563;
+        }
         /* Custom Scrollbar for dark theme */
         #material-list::-webkit-scrollbar { width: 8px; }
         #material-list::-webkit-scrollbar-thumb { background-color: #6b7280; border-radius: 4px; }
@@ -72,12 +78,20 @@
     </div>
 
     <header class="mb-4 flex justify-between items-center bg-white p-4 rounded-xl shadow-lg">
-        <h1 class="text-3xl font-extrabold text-gray-800">Minecraft Structure Analyzer</h1>
-        <!-- Removed onchange attribute -->
-        <input type="file" id="fileInput" accept=".mcstructure" class="hidden"> 
-        <label for="fileInput" class="cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-6 rounded-lg transition duration-300 shadow-md hover:shadow-lg transform hover:scale-105">
-            Load .mcstructure File
-        </label>
+        <div>
+            <h1 class="text-3xl font-extrabold text-gray-800">Minecraft Structure Analyzer</h1>
+            <p id="packStatus" class="mt-1">Textures: upload resource pack (.zip/.mcpack)</p>
+        </div>
+        <div class="flex flex-wrap gap-3 items-center">
+            <input type="file" id="fileInput" accept=".mcstructure" class="hidden"> 
+            <label for="fileInput" class="cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-6 rounded-lg transition duration-300 shadow-md hover:shadow-lg transform hover:scale-105">
+                Load .mcstructure File
+            </label>
+            <input type="file" id="resourcePackInput" accept=".zip,.mcpack" class="hidden">
+            <label for="resourcePackInput" class="cursor-pointer bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-2 px-6 rounded-lg transition duration-300 shadow-md hover:shadow-lg transform hover:scale-105">
+                Load Resource Pack (.zip/.mcpack)
+            </label>
+        </div>
     </header>
 
     <main id="app-container" class="grid-container gap-4">
@@ -123,6 +137,7 @@
         // --- CONSTANTS AND GLOBALS ---
         const BLOCK_SIZE = 1; 
         const STACK_SIZE = 64;
+        const DEFAULT_PACK_STATUS = "Textures: upload resource pack (.zip/.mcpack)";
         const textureManager = new ResourcePackTextureManager('./resource_pack');
 
         let sharedCubeGeometry = null;
@@ -158,6 +173,12 @@
         }
         if (typeof window !== 'undefined') {
             window.hideMessageBox = hideMessageBox;
+        }
+
+        function updatePackStatus(text) {
+            withElement('packStatus', (el) => {
+                el.textContent = text;
+            });
         }
 
         function showMessage(title, text, isError = true) {
@@ -480,11 +501,37 @@
             reader.readAsArrayBuffer(file);
         }
 
+        async function handleResourcePackUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            console.log(`Starting resource pack load for: ${file.name} (${file.size} bytes)`);
+            try {
+                await textureManager.setZipFile(file);
+                updatePackStatus(`Textures: ${file.name}`);
+                showMessage(
+                    "Resource Pack Loaded",
+                    `Successfully loaded **${file.name}**. Future visualizations will use its textures.`,
+                    false
+                );
+            } catch (error) {
+                console.error("Resource pack load failed:", error);
+                showMessage(
+                    "Resource Pack Error",
+                    `Unable to load **${file.name}**.<p class="text-left mt-3">${error.message}</p>`,
+                    true
+                );
+            } finally {
+                event.target.value = '';
+            }
+        }
+
         // --- INITIALIZATION ---
         window.onload = function () {
             console.log("Application started. Initializing Three.js.");
             initThreeJS();
             animate();
+            updatePackStatus(DEFAULT_PACK_STATUS);
 
             // FIX: Attach event listener programmatically since we are using 'type="module"'
             const fileInput = document.getElementById('fileInput');
@@ -492,6 +539,13 @@
                 fileInput.addEventListener('change', handleFileSelect);
             } else {
                 console.warn("#fileInput element not found in DOM.");
+            }
+
+            const resourcePackInput = document.getElementById('resourcePackInput');
+            if (resourcePackInput) {
+                resourcePackInput.addEventListener('change', handleResourcePackUpload);
+            } else {
+                console.warn("#resourcePackInput element not found in DOM.");
             }
 
             const slider = document.getElementById('layerSlider');

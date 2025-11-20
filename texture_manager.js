@@ -189,30 +189,51 @@ export class ResourcePackTextureManager {
         this.textureLoader = new THREE.TextureLoader();
         this.tgaLoader = new TGALoader();
         this.fallbackVisual = null;
+        this.sourceMode = 'static';
+        this.zip = null;
+        this.zipLookupCache = new Map();
+    }
+
+    resetCaches(resetTextures = false) {
+        this.blocksDataPromise = null;
+        this.terrainDataPromise = null;
+        if (resetTextures) {
+            this.textureCache.forEach((tex) => tex?.dispose?.());
+            this.textureCache.clear();
+            this.materialCache.clear();
+            this.previewCache.clear();
+        }
+    }
+
+    async setZipFile(file) {
+        if (typeof JSZip === 'undefined') {
+            throw new Error('JSZip library is required to load resource packs.');
+        }
+        this.zip = await JSZip.loadAsync(file);
+        this.sourceMode = 'zip';
+        this.zipLookupCache = new Map();
+        this.resetCaches(true);
+    }
+
+    clearZipSource() {
+        this.zip = null;
+        this.sourceMode = 'static';
+        this.zipLookupCache = new Map();
+        this.resetCaches(true);
     }
 
     async loadBlocksData() {
         if (!this.blocksDataPromise) {
-            this.blocksDataPromise = fetch(`${this.basePath}/blocks.json`).then((res) => {
-                if (!res.ok) {
-                    throw new Error('Unable to load blocks.json from resource pack.');
-                }
-                return res.json();
-            });
+            this.blocksDataPromise = this.readTextFile('blocks.json').then((text) => JSON.parse(text));
         }
         return this.blocksDataPromise;
     }
 
     async loadTerrainData() {
         if (!this.terrainDataPromise) {
-            this.terrainDataPromise = fetch(`${this.basePath}/textures/terrain_texture.json`)
-                .then((res) => {
-                    if (!res.ok) {
-                        throw new Error('Unable to load terrain_texture.json from resource pack.');
-                    }
-                    return res.text();
-                })
-                .then((text) => JSON.parse(stripJsonComments(text)));
+            this.terrainDataPromise = this.readTextFile('textures/terrain_texture.json').then((text) =>
+                JSON.parse(stripJsonComments(text))
+            );
         }
         return this.terrainDataPromise;
     }
@@ -263,18 +284,13 @@ export class ResourcePackTextureManager {
 
         const record = await this.getTextureRecord(textureId);
         const texturePath = this.resolveTexturePath(record, textureId);
-        const pngPath = `${this.basePath}/${texturePath}.png`;
-        const tgaPath = `${this.basePath}/${texturePath}.tga`;
 
-        let texture = await this.tryLoadTexture(pngPath, this.textureLoader).catch(() => null);
-        if (!texture) {
-            texture = await this.tryLoadTexture(tgaPath, this.tgaLoader).catch(() => null);
+        let texture = await this.loadTextureByPath(texturePath).catch(() => null);
+        if (!texture && textureId !== 'missing') {
+            texture = await this.loadTextureAsset('missing');
         }
 
         if (!texture) {
-            if (textureId !== 'missing') {
-                return this.loadTextureAsset('missing');
-            }
             const fallbackTexture = new THREE.Texture();
             fallbackTexture.needsUpdate = true;
             this.textureCache.set(cacheKey, fallbackTexture);
@@ -286,18 +302,54 @@ export class ResourcePackTextureManager {
         return texture;
     }
 
-    async tryLoadTexture(path, loader) {
+    async loadTextureByPath(texturePath) {
+        const normalized = texturePath.replace(/^\.\//, '');
+        const candidates = [`${normalized}.png`, `${normalized}.tga`];
+        for (const candidate of candidates) {
+            const texture = await this.loadTextureCandidate(candidate);
+            if (texture) {
+                return texture;
+            }
+        }
+        return null;
+    }
+
+    async loadTextureCandidate(candidatePath) {
+        const isTga = candidatePath.toLowerCase().endsWith('.tga');
+        const loader = isTga ? this.tgaLoader : this.textureLoader;
+
+        if (this.sourceMode === 'zip') {
+            const fileEntry = await this.findZipEntry(candidatePath);
+            if (!fileEntry) {
+                return null;
+            }
+            const arrayBuffer = await fileEntry.async('arraybuffer');
+            const blob = new Blob([arrayBuffer], { type: isTga ? 'image/x-tga' : 'image/png' });
+            const objectUrl = URL.createObjectURL(blob);
+            try {
+                const texture = await this.loadTextureFromUrl(objectUrl, loader);
+                texture.userData = texture.userData || {};
+                texture.userData.sourcePath = candidatePath;
+                return texture;
+            } finally {
+                URL.revokeObjectURL(objectUrl);
+            }
+        }
+
+        const url = `${this.basePath}/${candidatePath}`;
+        try {
+            const texture = await this.loadTextureFromUrl(url, loader);
+            texture.userData = texture.userData || {};
+            texture.userData.sourcePath = url;
+            return texture;
+        } catch (error) {
+            return null;
+        }
+    }
+
+    loadTextureFromUrl(url, loader) {
         return new Promise((resolve, reject) => {
-            loader.load(
-                path,
-                (texture) => {
-                    texture.userData = texture.userData || {};
-                    texture.userData.sourcePath = path;
-                    resolve(texture);
-                },
-                undefined,
-                (err) => reject(err)
-            );
+            loader.load(url, resolve, undefined, reject);
         });
     }
 
@@ -412,6 +464,48 @@ export class ResourcePackTextureManager {
         const visual = await this.getBlockVisual({ name: blockName, states: {} });
         this.previewCache.set(blockName, visual.previewSrc);
         return visual.previewSrc;
+    }
+
+    async readTextFile(path) {
+        if (this.sourceMode === 'zip') {
+            const file = await this.findZipEntry(path);
+            if (!file) {
+                throw new Error(`Missing file in resource pack: ${path}`);
+            }
+            return file.async('text');
+        }
+        const url = `${this.basePath}/${path.replace(/^\.\//, '')}`;
+        const res = await fetch(url);
+        if (!res.ok) {
+            throw new Error(`Unable to load ${path} from resource pack.`);
+        }
+        return res.text();
+    }
+
+    async findZipEntry(path) {
+        if (!this.zip) return null;
+        const normalized = path.replace(/^\.\//, '').toLowerCase();
+        if (this.zipLookupCache.has(normalized)) {
+            const cachedKey = this.zipLookupCache.get(normalized);
+            return this.zip.files[cachedKey] || null;
+        }
+
+        const direct = this.zip.files[normalized];
+        if (direct && !direct.dir) {
+            this.zipLookupCache.set(normalized, normalized);
+            return direct;
+        }
+
+        const matchKey = Object.keys(this.zip.files).find((key) => {
+            const entry = this.zip.files[key];
+            return !entry.dir && key.toLowerCase().endsWith(normalized);
+        });
+
+        if (matchKey) {
+            this.zipLookupCache.set(normalized, matchKey);
+            return this.zip.files[matchKey];
+        }
+        return null;
     }
 }
 
