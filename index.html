@@ -190,6 +190,8 @@
         let maxLayer = 0;
         let currentLayer = 0;
     let isGridVisible = true;
+    // cache of preview images for each palette index (Image objects)
+    const palettePreviewImages = {};
 
 
         // Custom geometries for special block types
@@ -317,75 +319,103 @@
         // --- 2D LAYER GRID VIEW LOGIC ---
         function render2DLayerGrid() {
             const canvas = document.getElementById('layer2d-canvas');
+            if (!canvas || !structureData) return;
             const ctx = canvas.getContext('2d');
             const tooltip = document.getElementById('layer2d-tooltip');
             const info = document.getElementById('layer2dInfo');
             const layerInput = document.getElementById('layer2dInput');
-            if (!canvas || !ctx || !structureData) return;
             const { size, blocks, palette } = structureData;
             const sx = size.x, sz = size.z, sy = size.y;
+            // high-DPI handling
+            const dpr = window.devicePixelRatio || 1;
+            // Ensure we draw in CSS pixels by scaling context
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            const cssW = canvas.width / dpr;
+            const cssH = canvas.height / dpr;
+
             // Clamp layer
-            let y = Math.max(0, Math.min(Number(layerInput.value)||0, sy-1));
+            let y = Math.max(0, Math.min(Number(layerInput.value) || 0, sy - 1));
             layerInput.value = y;
-            info.textContent = `/ ${sy-1}`;
+            info.textContent = `/ ${sy - 1}`;
+
             // Find blocks in this layer
-            const grid = Array.from({length: sz}, () => Array(sx).fill(null));
+            const grid = Array.from({ length: sz }, () => Array(sx).fill(null));
             blocks.forEach(b => { if (b.y === y) grid[b.z][b.x] = b; });
-            // Scale to fit
-            const pad = 10, w = canvas.width, h = canvas.height;
-            const cellW = Math.floor((w-2*pad)/sx), cellH = Math.floor((h-2*pad)/sz);
-            const drawW = cellW*sx, drawH = cellH*sz;
-            const offX = Math.floor((w-drawW)/2), offY = Math.floor((h-drawH)/2);
-            ctx.clearRect(0,0,w,h);
-            // Draw grid
+
+            // Scale to fit: use more padding but allow cells to be large
+            const pad = 8;
+            const cellW = Math.floor((cssW - 2 * pad) / sx);
+            const cellH = Math.floor((cssH - 2 * pad) / sz);
+            const drawW = cellW * sx, drawH = cellH * sz;
+            const offX = Math.floor((cssW - drawW) / 2);
+            const offY = Math.floor((cssH - drawH) / 2);
+
+            // Clear and draw background
+            ctx.clearRect(0, 0, cssW, cssH);
+
+            // Draw grid cells and fill with textures if available
             ctx.save();
             ctx.lineWidth = 1;
-            for (let z=0; z<sz; z++) {
-                for (let x=0; x<sx; x++) {
+            for (let z = 0; z < sz; z++) {
+                for (let x = 0; x < sx; x++) {
                     // Center highlight
                     let isCenter = false;
-                    if (sx%2===1 && sz%2===1) isCenter = (x===Math.floor(sx/2) && z===Math.floor(sz/2));
-                    else if (sx%2===0 && sz%2===0) isCenter = (x===sx/2-1||x===sx/2)&&(z===sz/2-1||z===sz/2);
-                    else if (sx%2===0) isCenter = (x===sx/2-1||x===sx/2)&&(z===Math.floor(sz/2));
-                    else if (sz%2===0) isCenter = (z===sz/2-1||z===sz/2)&&(x===Math.floor(sx/2));
+                    if (sx % 2 === 1 && sz % 2 === 1) isCenter = (x === Math.floor(sx / 2) && z === Math.floor(sz / 2));
+                    else if (sx % 2 === 0 && sz % 2 === 0) isCenter = (x === sx / 2 - 1 || x === sx / 2) && (z === sz / 2 - 1 || z === sz / 2);
+                    else if (sx % 2 === 0) isCenter = (x === sx / 2 - 1 || x === sx / 2) && (z === Math.floor(sz / 2));
+                    else if (sz % 2 === 0) isCenter = (z === sz / 2 - 1 || z === sz / 2) && (x === Math.floor(sx / 2));
                     ctx.fillStyle = isCenter ? '#e0e7ef' : '#f3f4f6';
-                    ctx.fillRect(offX+x*cellW, offY+z*cellH, cellW, cellH);
+                    const xPx = offX + x * cellW, yPx = offY + z * cellH;
+                    ctx.fillRect(xPx, yPx, cellW, cellH);
                     ctx.strokeStyle = '#b6bbc7';
-                    ctx.strokeRect(offX+x*cellW+0.5, offY+z*cellH+0.5, cellW-1, cellH-1);
+                    ctx.strokeRect(xPx + 0.5, yPx + 0.5, cellW - 1, cellH - 1);
+
+                    // Draw texture preview if available
+                    const b = grid[z][x];
+                    if (b) {
+                        const img = palettePreviewImages[b.paletteIndex];
+                        if (img && img.complete && img.naturalWidth) {
+                            // draw image to fit cell (cover style)
+                            const iw = img.naturalWidth, ih = img.naturalHeight;
+                            // calculate cover scaling
+                            const scale = Math.max(cellW / iw, cellH / ih);
+                            const dw = iw * scale, dh = ih * scale;
+                            const dx = xPx + (cellW - dw) / 2;
+                            const dy = yPx + (cellH - dh) / 2;
+                            ctx.drawImage(img, dx, dy, dw, dh);
+                        } else {
+                            // fallback: color by block name
+                            const paletteEntry = palette[b.paletteIndex];
+                            ctx.save(); ctx.globalAlpha = 0.85;
+                            ctx.fillStyle = stringToColor(paletteEntry?.name || 'unknown');
+                            ctx.fillRect(xPx + 2, yPx + 2, cellW - 4, cellH - 4);
+                            ctx.restore();
+                        }
+                    }
                 }
             }
             ctx.restore();
-            // Draw block color/texture (simple color by block type)
-            for (let z=0; z<sz; z++) for (let x=0; x<sx; x++) {
-                const b = grid[z][x];
-                if (!b) continue;
-                const paletteEntry = palette[b.paletteIndex];
-                ctx.save();
-                ctx.globalAlpha = 0.85;
-                ctx.fillStyle = stringToColor(paletteEntry?.name||'unknown');
-                ctx.fillRect(offX+x*cellW+2, offY+z*cellH+2, cellW-4, cellH-4);
-                ctx.restore();
-            }
-            // Mouse interaction
+
+            // Mouse interaction (in CSS pixel coords)
             canvas.onmousemove = e => {
                 const rect = canvas.getBoundingClientRect();
-                const mx = e.clientX-rect.left, my = e.clientY-rect.top;
-                const gx = Math.floor((mx-offX)/cellW), gz = Math.floor((my-offY)/cellH);
-                if (gx>=0 && gx<sx && gz>=0 && gz<sz) {
+                const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+                const gx = Math.floor((mx - offX) / cellW), gz = Math.floor((my - offY) / cellH);
+                if (gx >= 0 && gx < sx && gz >= 0 && gz < sz) {
                     const b = grid[gz][gx];
                     let html = `<b>Block:</b> `;
                     if (b) {
                         const p = palette[b.paletteIndex];
-                        html += (p?.name||'unknown').replace('minecraft:','');
+                        html += (p?.name || 'unknown').replace('minecraft:', '');
                         if (p?.states && Object.keys(p.states).length) {
-                            html += `<br><b>Data:</b> `+Object.entries(p.states).map(([k,v])=>`${k}: ${v}`).join(', ');
+                            html += `<br><b>Data:</b> ` + Object.entries(p.states).map(([k, v]) => `${k}: ${v}`).join(', ');
                         }
                     } else html += 'air';
                     html += `<br><b>Coords:</b> (${gx}, ${gz})`;
                     tooltip.innerHTML = html;
                     tooltip.style.display = 'block';
-                    tooltip.style.left = (mx+12)+'px';
-                    tooltip.style.top = (my+12)+'px';
+                    tooltip.style.left = (e.clientX + 12) + 'px';
+                    tooltip.style.top = (e.clientY + 12) + 'px';
                 } else {
                     tooltip.style.display = 'none';
                 }
@@ -794,6 +824,25 @@
                         layerControls.classList.remove('hidden');
                     }
 
+
+                    // Preload palette preview images for 2D view
+                    try {
+                        const promises = (structureData.palette || []).map(async (p, idx) => {
+                            try {
+                                const src = await textureManager.getBlockPreview(p.name || p.block || '');
+                                if (src) {
+                                    const img = new Image();
+                                    img.src = src;
+                                    palettePreviewImages[idx] = img;
+                                }
+                            } catch (e) {
+                                // ignore missing previews
+                            }
+                        });
+                        await Promise.all(promises);
+                    } catch (e) {
+                        console.warn('Failed to preload palette previews', e);
+                    }
 
                     // Update 2D grid view
                     update2DLayerGridAfterLoad();
