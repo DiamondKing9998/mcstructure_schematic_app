@@ -721,41 +721,82 @@
             try { updateOverlayGrid(); } catch (e) { /* ignore if not ready */ }
         }
 
-        // Draw an overlay grid (wireframe lines) at the currently selected layer to make counting easier
+        // Draw an overlay grid (thicker visual lines) at the currently selected layer and highlight center area
         function updateOverlayGrid() {
             if (!structureData || !scene) return;
             const layerInput = document.getElementById('layer2dInput');
             const y = layerInput ? Math.max(0, Math.min(Number(layerInput.value) || 0, structureData.size.y - 1)) : 0;
             currentLayer = y;
-            // remove previous overlay
+            // remove previous overlay group
             if (overlayGrid) {
-                try { scene.remove(overlayGrid); overlayGrid.geometry?.dispose(); overlayGrid.material?.dispose(); } catch (e) {}
+                try {
+                    overlayGrid.children.forEach(c => { overlayGrid.remove(c); c.geometry?.dispose(); c.material?.dispose(); });
+                    scene.remove(overlayGrid);
+                } catch (e) {}
                 overlayGrid = null;
             }
+
             const sx = structureData.size.x, sz = structureData.size.z;
-            const gridSizeX = sx * BLOCK_SIZE;
-            const gridSizeZ = sz * BLOCK_SIZE;
             const centerX = (sx - 1) * BLOCK_SIZE / 2;
             const centerZ = (sz - 1) * BLOCK_SIZE / 2;
 
-            const lines = new THREE.BufferGeometry();
-            const vertices = [];
+            overlayGrid = new THREE.Group();
+
+            // thicker line thickness implemented as thin box meshes (so they show up clearly)
+            const lineThickness = 0.06 * BLOCK_SIZE; // tune this value for visibility
+            const lineHeight = 0.02 * BLOCK_SIZE; // small vertical thickness
+
+            const lineMaterial = new THREE.MeshBasicMaterial({ color: 0x111827, transparent: true, opacity: 0.85 });
+
             // vertical lines along X
             for (let x = 0; x <= sx; x++) {
                 const vx = x * BLOCK_SIZE - centerX - BLOCK_SIZE/2;
-                vertices.push(vx, y * BLOCK_SIZE + 0.01, -centerZ - BLOCK_SIZE/2);
-                vertices.push(vx, y * BLOCK_SIZE + 0.01, centerZ + BLOCK_SIZE/2);
+                const length = (sz + 0.0) * BLOCK_SIZE + lineThickness; // cover full Z
+                const geom = new THREE.BoxGeometry(lineThickness, lineHeight, length);
+                const mesh = new THREE.Mesh(geom, lineMaterial);
+                mesh.position.set(vx, y * BLOCK_SIZE + lineHeight / 2 + 0.01, 0);
+                overlayGrid.add(mesh);
             }
+
             // horizontal lines along Z
             for (let z = 0; z <= sz; z++) {
                 const vz = z * BLOCK_SIZE - centerZ - BLOCK_SIZE/2;
-                vertices.push(-centerX - BLOCK_SIZE/2, y * BLOCK_SIZE + 0.01, vz);
-                vertices.push(centerX + BLOCK_SIZE/2, y * BLOCK_SIZE + 0.01, vz);
+                const length = (sx + 0.0) * BLOCK_SIZE + lineThickness;
+                const geom = new THREE.BoxGeometry(length, lineHeight, lineThickness);
+                const mesh = new THREE.Mesh(geom, lineMaterial);
+                mesh.position.set(0, y * BLOCK_SIZE + lineHeight / 2 + 0.01, vz);
+                overlayGrid.add(mesh);
             }
-            const verts = new Float32Array(vertices);
-            lines.setAttribute('position', new THREE.BufferAttribute(verts, 3));
-            const mat = new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 1, transparent: true, opacity: 0.65 });
-            overlayGrid = new THREE.LineSegments(lines, mat);
+
+            // center area highlight: determine if 1-block centered or 2-block centered
+            const centerArea = new THREE.Group();
+            if (sx % 2 === 1 && sz % 2 === 1) {
+                // single center cell
+                const cx = Math.floor(sx / 2);
+                const cz = Math.floor(sz / 2);
+                const geom = new THREE.PlaneGeometry(BLOCK_SIZE, BLOCK_SIZE);
+                const mat = new THREE.MeshBasicMaterial({ color: 0x2563eb, transparent: true, opacity: 0.12, side: THREE.DoubleSide });
+                const plane = new THREE.Mesh(geom, mat);
+                plane.rotation.x = -Math.PI/2;
+                plane.position.set(cx * BLOCK_SIZE - centerX, y * BLOCK_SIZE + 0.015, cz * BLOCK_SIZE - centerZ);
+                centerArea.add(plane);
+            } else {
+                // two-block centered area (2x1 or 2x2) - compute central indices
+                const cxLow = Math.floor((sx - 1) / 2);
+                const czLow = Math.floor((sz - 1) / 2);
+                const cxCount = (sx % 2 === 0) ? 2 : 1;
+                const czCount = (sz % 2 === 0) ? 2 : 1;
+                const geom = new THREE.PlaneGeometry(BLOCK_SIZE * cxCount, BLOCK_SIZE * czCount);
+                const mat = new THREE.MeshBasicMaterial({ color: 0x16a34a, transparent: true, opacity: 0.12, side: THREE.DoubleSide });
+                const plane = new THREE.Mesh(geom, mat);
+                plane.rotation.x = -Math.PI/2;
+                const centerCellX = (cxLow + (cxCount - 1) / 2) * BLOCK_SIZE - centerX;
+                const centerCellZ = (czLow + (czCount - 1) / 2) * BLOCK_SIZE - centerZ;
+                plane.position.set(centerCellX, y * BLOCK_SIZE + 0.015, centerCellZ);
+                centerArea.add(plane);
+            }
+            overlayGrid.add(centerArea);
+
             scene.add(overlayGrid);
         }
 
