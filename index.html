@@ -579,6 +579,17 @@
                     const b = bottomInput ? parseInt(bottomInput.value, 10) : 0;
                     const t = topInput ? parseInt(topInput.value, 10) : 0;
                     applyLayerRange(b, t);
+
+                    // Auto-enable Preview Mode (no lighting) so textures are visible by default
+                    try {
+                        const previewCheckbox = document.getElementById('previewModeCheckbox');
+                        if (previewCheckbox && !previewCheckbox.checked) {
+                            previewCheckbox.checked = true;
+                            previewCheckbox.dispatchEvent(new Event('change'));
+                        }
+                    } catch (e) {
+                        console.warn('Failed to auto-enable Preview Mode', e);
+                    }
                     
                     if (loadingMessageEl) {
                         loadingMessageEl.classList.add('hidden');
