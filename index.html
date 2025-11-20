@@ -332,12 +332,14 @@
             const grid = Array.from({length: sz}, () => Array(sx).fill(null));
             blocks.forEach(b => { if (b.y === y) grid[b.z][b.x] = b; });
             // Scale to fit
-            const pad = 2, w = canvas.width, h = canvas.height;
+            const pad = 10, w = canvas.width, h = canvas.height;
             const cellW = Math.floor((w-2*pad)/sx), cellH = Math.floor((h-2*pad)/sz);
             const drawW = cellW*sx, drawH = cellH*sz;
             const offX = Math.floor((w-drawW)/2), offY = Math.floor((h-drawH)/2);
             ctx.clearRect(0,0,w,h);
             // Draw grid
+            ctx.save();
+            ctx.lineWidth = 1;
             for (let z=0; z<sz; z++) {
                 for (let x=0; x<sx; x++) {
                     // Center highlight
@@ -349,9 +351,10 @@
                     ctx.fillStyle = isCenter ? '#e0e7ef' : '#f3f4f6';
                     ctx.fillRect(offX+x*cellW, offY+z*cellH, cellW, cellH);
                     ctx.strokeStyle = '#b6bbc7';
-                    ctx.strokeRect(offX+x*cellW, offY+z*cellH, cellW, cellH);
+                    ctx.strokeRect(offX+x*cellW+0.5, offY+z*cellH+0.5, cellW-1, cellH-1);
                 }
             }
+            ctx.restore();
             // Draw block color/texture (simple color by block type)
             for (let z=0; z<sz; z++) for (let x=0; x<sx; x++) {
                 const b = grid[z][x];
