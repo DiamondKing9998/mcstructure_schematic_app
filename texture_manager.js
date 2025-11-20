@@ -1,5 +1,3 @@
-import { TGALoader } from 'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/jsm/loaders/TGALoader.js';
-
 const RESOURCE_PACK_BASE_PATH = './resource_pack';
 const FACE_ORDER = ['east', 'west', 'up', 'down', 'south', 'north'];
 const HORIZONTAL_FACES = ['north', 'east', 'south', 'west'];
@@ -187,11 +185,19 @@ export class ResourcePackTextureManager {
         this.materialCache = new Map();
         this.previewCache = new Map();
         this.textureLoader = new THREE.TextureLoader();
-        this.tgaLoader = new TGALoader();
+        this.tgaLoader = this.createTgaLoader();
         this.fallbackVisual = null;
         this.sourceMode = 'static';
         this.zip = null;
         this.zipLookupCache = new Map();
+    }
+
+    createTgaLoader() {
+        if (typeof THREE === 'undefined' || typeof THREE.TGALoader === 'undefined') {
+            console.warn('THREE.TGALoader is not available. TGA textures will not render.');
+            return null;
+        }
+        return new THREE.TGALoader();
     }
 
     resetCaches(resetTextures = false) {
@@ -316,6 +322,9 @@ export class ResourcePackTextureManager {
 
     async loadTextureCandidate(candidatePath) {
         const isTga = candidatePath.toLowerCase().endsWith('.tga');
+        if (isTga && !this.tgaLoader) {
+            return null;
+        }
         const loader = isTga ? this.tgaLoader : this.textureLoader;
 
         if (this.sourceMode === 'zip') {
