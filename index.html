@@ -625,6 +625,33 @@
             animate();
             updatePackStatus(DEFAULT_PACK_STATUS);
 
+            // Expose live references to module-scoped internals for debugging in the console
+            window._app = {
+                get scene() { return scene; },
+                get camera() { return camera; },
+                get renderer() { return renderer; },
+                get controls() { return controls; },
+                get blockGroup() { return blockGroup; },
+                get textureManager() { return textureManager; }
+            };
+
+            // Helper to dump blockGroup mesh/material summary from the console: call window.dumpBlockGroupSummary()
+            window.dumpBlockGroupSummary = function() {
+                const bg = window._app.blockGroup;
+                if (!bg) { console.warn('blockGroup not ready'); return; }
+                bg.children.forEach((mesh, meshIdx) => {
+                    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+                    const matInfo = mats.map((m, i) => ({
+                        matIndex: i,
+                        hasMap: !!(m && m.map),
+                        mapImageSize: m && m.map && (m.map.image?.naturalWidth || m.map.image?.width) || null,
+                        sourcePath: m?.map?.userData?.sourcePath || m?.userData?.sourcePath || null,
+                        previewSrcPresent: !!(m?.map?.userData?.previewSrc || m?.userData?.previewSrc)
+                    }));
+                    console.log(`Mesh[${meshIdx}] layer=${mesh.userData?.layer} materials=${mats.length}`, matInfo);
+                });
+            };
+
             // FIX: Attach event listener programmatically since we are using 'type="module"'
             const fileInput = document.getElementById('fileInput');
             if (fileInput) {
