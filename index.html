@@ -100,6 +100,20 @@
     </header>
 
     <main id="app-container" class="grid-container gap-4">
+
+        <!-- 2D Top-Down Grid View for Layer Inspection -->
+        <div id="layer2d-container" class="mb-4 p-2 bg-white rounded-lg shadow flex flex-col items-center">
+            <div class="flex items-center gap-3 mb-2">
+                <label for="layer2dInput" class="text-sm font-medium text-gray-700">2D Layer (Y):</label>
+                <input id="layer2dInput" type="number" min="0" value="0" class="w-20 p-1 rounded border border-gray-300 text-sm" />
+                <span id="layer2dInfo" class="text-xs text-gray-500"></span>
+            </div>
+            <div style="position:relative;">
+                <canvas id="layer2d-canvas" width="400" height="400" style="border:1px solid #d1d5db; background:#f3f4f6; cursor:crosshair;"></canvas>
+                <div id="layer2d-tooltip" style="display:none; position:absolute; pointer-events:none; background:rgba(30,41,59,0.95); color:#fff; font-size:13px; padding:6px 10px; border-radius:8px; z-index:20; min-width:120px;"></div>
+            </div>
+        </div>
+
         <!-- 3D Visualizer Container -->
         <div id="canvas-container" class="p-2">
             <div id="loadingMessage" class="absolute inset-0 flex items-center justify-center text-white text-xl bg-gray-900 bg-opacity-80 transition duration-500 z-10 hidden">
