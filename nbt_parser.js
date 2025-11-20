@@ -71,6 +71,16 @@ export async function parseMCStructureBinary(buffer) {
     }
 
     console.log("--- NBT Parser: All Integrity Checks Passed! ---");
+    // Debug: print top-level keys and structure
+    if (parsedStructureData && typeof parsedStructureData === 'object') {
+        console.log('[DEBUG] Top-level keys:', Object.keys(parsedStructureData));
+        if (parsedStructureData.structure) {
+            console.log('[DEBUG] structure keys:', Object.keys(parsedStructureData.structure));
+            if (parsedStructureData.structure.block_indices) {
+                console.log('[DEBUG] block_indices type:', typeof parsedStructureData.structure.block_indices, 'length:', parsedStructureData.structure.block_indices.length);
+            }
+        }
+    }
     const transformed = transformStructure(parsedStructureData);
     // Debug logging for troubleshooting
     console.log("[DEBUG] Parsed palette:", transformed.palette);
