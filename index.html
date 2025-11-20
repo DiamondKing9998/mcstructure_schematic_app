@@ -791,6 +791,10 @@
                         layerControls.classList.remove('hidden');
                     }
 
+
+                    // Update 2D grid view
+                    update2DLayerGridAfterLoad();
+
                     await buildStructure(structureData);
 
                     // Apply the default layer range (show only first layer)
@@ -876,6 +880,25 @@
 
         // --- INITIALIZATION ---
         window.onload = function () {
+
+            // 2D Layer Grid setup
+            setup2DLayerGrid();
+
+            // Resize 2D grid canvas on window resize
+            window.addEventListener('resize', () => {
+                const canvas = document.getElementById('layer2d-canvas');
+                if (canvas) {
+                    // Set to parent size or default 400x400
+                    const parent = canvas.parentElement;
+                    if (parent) {
+                        const size = Math.min(parent.clientWidth, 500);
+                        canvas.width = size;
+                        canvas.height = size;
+                    }
+                    render2DLayerGrid();
+                }
+            });
+
             console.log("Application started. Initializing Three.js.");
             initThreeJS();
             animate();
