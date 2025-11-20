@@ -382,9 +382,30 @@ export class ResourcePackTextureManager {
     }
 
     configureTexture(texture) {
+        const MAX_DIM = 1024; // if textures are larger than this, resample down to save GPU memory
         texture.encoding = THREE.sRGBEncoding;
         texture.magFilter = THREE.NearestFilter;
         texture.minFilter = THREE.LinearMipMapLinearFilter;
+
+        try {
+            const img = texture.image;
+            if (img && (img.width > MAX_DIM || img.height > MAX_DIM)) {
+                console.info(`configureTexture: downscaling large texture (${img.width}x${img.height}) to ${MAX_DIM}px max`);
+                const scale = MAX_DIM / Math.max(img.width, img.height);
+                const canvas = document.createElement('canvas');
+                canvas.width = Math.max(1, Math.floor(img.width * scale));
+                canvas.height = Math.max(1, Math.floor(img.height * scale));
+                const ctx = canvas.getContext('2d');
+                ctx.imageSmoothingEnabled = false;
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                texture.image = canvas;
+                texture.needsUpdate = true;
+                texture.userData = texture.userData || {};
+                texture.userData.resized = true;
+            }
+        } catch (e) {
+            console.warn('configureTexture: failed to resample texture', e);
+        }
     }
 
     getTexturePreviewSrc(texture) {
@@ -427,19 +448,32 @@ export class ResourcePackTextureManager {
         if (this.materialCache.has(key)) {
             return this.materialCache.get(key);
         }
-
-        const blockDefinition = await this.getBlockDefinition(entry.name);
+        // Be tolerant to missing blocks.json or lookup errors
+        let blockDefinition = null;
+        try {
+            blockDefinition = await this.getBlockDefinition(entry.name);
+        } catch (e) {
+            console.warn('getBlockVisual: failed to get block definition for', entry.name, e);
+            blockDefinition = null;
+        }
         const faceMap = this.normalizeEntryFaces(blockDefinition, entry);
         const renderMethod = blockDefinition?.render_method ?? 'opaque';
 
-        const textures = await Promise.all(
-            FACE_ORDER.map((face) => this.loadTextureAsset(faceMap[face]))
-        );
-        const materials = textures.map((texture) => this.createMaterial(texture, renderMethod));
+            const textures = await Promise.all(
+                FACE_ORDER.map((face) => this.loadTextureAsset(faceMap[face]).catch(() => null))
+            );
+            const materials = textures.map((texture, idx) => {
+                try {
+                    return this.createMaterial(texture, renderMethod);
+                } catch (e) {
+                    console.warn(`createMaterial failed for face ${FACE_ORDER[idx]} of ${entry.name}`, e);
+                    return new THREE.MeshStandardMaterial({ color: 0x8e8e8e });
+                }
+            });
         const previewTexture = textures[2] || textures[4] || textures.find(Boolean);
         const previewSrc = this.getTexturePreviewSrc(previewTexture);
 
-        const visual = { materials, previewSrc };
+    const visual = { materials: materials.map(m => m || new THREE.MeshStandardMaterial({ color: 0x8e8e8e })), previewSrc };
         this.materialCache.set(key, visual);
         return visual;
     }
@@ -454,7 +488,9 @@ export class ResourcePackTextureManager {
     }
 
     createMaterial(texture, renderMethod = 'opaque') {
-        if (!texture) {
+        // If the texture is missing or not decoded into an image, return a neutral fallback material
+        if (!texture || !texture.image) {
+            console.warn('createMaterial: texture missing or has no image, using fallback material.', texture?.userData?.sourcePath || null);
             return new THREE.MeshStandardMaterial({ color: 0x8e8e8e });
         }
 

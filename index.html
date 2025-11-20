@@ -374,18 +374,23 @@
             const geometry = getSharedCubeGeometry();
             let paletteVisuals;
 
-            try {
-                paletteVisuals = await Promise.all(
-                    palette.map((entry) => textureManager.getBlockVisual(entry))
-                );
-            } catch (error) {
-                console.error("Failed to prepare block textures:", error);
-                paletteVisuals = palette.map(() => textureManager.getFallbackVisual());
-            }
+            // Load palette visuals; use allSettled so individual failures don't wipe the whole palette
+            const settled = await Promise.allSettled(palette.map((entry) => textureManager.getBlockVisual(entry)));
+            paletteVisuals = settled.map((res, idx) => {
+                if (res.status === 'fulfilled' && res.value) return res.value;
+                console.warn(`Palette visual load failed for index ${idx} (${palette[idx]?.name}), using fallback.`);
+                return textureManager.getFallbackVisual();
+            });
 
             blocks.forEach((block) => {
                 const visual = paletteVisuals[block.paletteIndex] || textureManager.getFallbackVisual();
-                const mesh = new THREE.Mesh(geometry, visual.materials);
+                // Ensure we have exactly 6 materials (one per face). Fill with fallback where missing.
+                let materials = Array.isArray(visual.materials) ? visual.materials.slice() : [];
+                if (materials.length < 6) {
+                    const fallback = textureManager.getFallbackVisual().materials[0];
+                    while (materials.length < 6) materials.push(fallback);
+                }
+                const mesh = new THREE.Mesh(geometry, materials);
 
                 mesh.position.set(
                     block.x * BLOCK_SIZE - center.x,
@@ -440,7 +445,21 @@
                 mesh.visible = enabled ? (layer >= bottom && layer <= top) : true;
             });
 
-            console.log(`Layer range filter applied: ${enabled ? `${bottom}..${top}` : 'All'}`);
+            // Quick diagnostic: if only a small range is shown, log a summary of distinct material sources
+            if (enabled && (top - bottom) <= 1) {
+                const sources = new Set();
+                blockGroup.children.forEach(mesh => {
+                    if (!mesh.visible) return;
+                    const mats = mesh.material || [];
+                    (Array.isArray(mats) ? mats : [mats]).forEach(m => {
+                        const src = m?.map?.userData?.sourcePath || m?.userData?.sourcePath || m?.userData?.previewSrc || null;
+                        if (src) sources.add(src);
+                    });
+                });
+                console.log(`Layer range filter applied: ${enabled ? `${bottom}..${top}` : 'All'}. Distinct texture sources for visible meshes:`, Array.from(sources).slice(0,50));
+            } else {
+                console.log(`Layer range filter applied: ${enabled ? `${bottom}..${top}` : 'All'}`);
+            }
         }
 
         // --- EVENT HANDLERS ---
