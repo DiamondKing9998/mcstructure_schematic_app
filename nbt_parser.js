@@ -71,7 +71,12 @@ export async function parseMCStructureBinary(buffer) {
     }
 
     console.log("--- NBT Parser: All Integrity Checks Passed! ---");
-    return transformStructure(parsedStructureData);
+    const transformed = transformStructure(parsedStructureData);
+    // Debug logging for troubleshooting
+    console.log("[DEBUG] Parsed palette:", transformed.palette);
+    console.log("[DEBUG] Block count:", transformed.blocks.length);
+    console.log("[DEBUG] Material counts:", transformed.materials);
+    return transformed;
 }
 
 function normalizeSize(sizeList = []) {
