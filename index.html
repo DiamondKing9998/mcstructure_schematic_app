@@ -439,7 +439,7 @@
                     buildStructure(structureData);
                     
                     document.getElementById('loadingMessage').classList.add('hidden');
-                    showMessage("File Loaded (Mock Data)", `Successfully decompressed the Gzip portion of **${file.name}**. The app is now visualizing the structure using placeholder block data.`, false);
+                    showMessage("File Loaded (Gzip Decompressed)", `The file **${file.name}** was successfully decompressed (Gzip).<br><br>The next step, **NBT (Named Binary Tag) Parsing**, requires a complex library like *Prismarine-NBT* that cannot be loaded via a simple CDN. The app is currently displaying a mock structure and material list.`, false);
 
 
                 } catch (error) {
