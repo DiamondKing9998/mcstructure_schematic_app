@@ -379,127 +379,29 @@
             };
 
             const geometry = getSharedCubeGeometry();
-            let paletteVisuals;
 
-            // Load palette visuals; use allSettled so individual failures don't wipe the whole palette
+            // Get visuals for the palette entries (defensive - preserve successes)
             const settled = await Promise.allSettled(palette.map((entry) => textureManager.getBlockVisual(entry)));
-            paletteVisuals = settled.map((res, idx) => {
-                if (res.status === 'fulfilled' && res.value) return res.value;
-                console.warn(`Palette visual load failed for index ${idx} (${palette[idx]?.name}), using fallback.`);
-                return textureManager.getFallbackVisual();
-            });
+            const paletteVisuals = settled.map((res, idx) => (res.status === 'fulfilled' && res.value) ? res.value : textureManager.getFallbackVisual());
 
-            const enableMergingEl = document.getElementById('enableMerging');
-            const enableMerging = enableMergingEl ? enableMergingEl.checked : true;
-
-            if (!enableMerging) {
-                // Create individual meshes (no merging) to aid debugging texture visibility
-                blocks.forEach((block) => {
-                    const visual = paletteVisuals[block.paletteIndex] || textureManager.getFallbackVisual();
-                    let materials = Array.isArray(visual.materials) ? visual.materials.slice() : [];
-                    if (materials.length < 6) {
-                        const fallback = textureManager.getFallbackVisual().materials[0];
-                        while (materials.length < 6) materials.push(fallback);
-                    }
-                    const mesh = new THREE.Mesh(geometry, materials);
-                    mesh.position.set(
-                        block.x * BLOCK_SIZE - center.x,
-                        block.y * BLOCK_SIZE + BLOCK_SIZE / 2,
-                        block.z * BLOCK_SIZE - center.z
-                    );
-                    mesh.userData = { layer: block.y };
-                    blockGroup.add(mesh);
-                });
-            } else {
-                // For performance, merge identical palette-indexed cubes per-layer into single BufferGeometries
-                const grouped = new Map();
-                blocks.forEach((block) => {
-                    const key = `${block.paletteIndex}_${block.y}`; // group by palette index AND layer
-                    if (!grouped.has(key)) grouped.set(key, []);
-                    grouped.get(key).push(block);
-                });
-
-            const debugMerged = [];
-            grouped.forEach((groupBlocks, key) => {
-                const [paletteIndexStr, layerStr] = key.split('_');
-                const paletteIndex = parseInt(paletteIndexStr, 10);
-                const layerY = parseInt(layerStr, 10);
-                const visual = paletteVisuals[paletteIndex] || textureManager.getFallbackVisual();
-                // Ensure we have exactly 6 materials (one per face). Fill with fallback where missing.
+            // Create a mesh per block (simpler and less error-prone). We'll optimize later.
+            blocks.forEach((block) => {
+                const visual = paletteVisuals[block.paletteIndex] || textureManager.getFallbackVisual();
                 let materials = Array.isArray(visual.materials) ? visual.materials.slice() : [];
                 if (materials.length < 6) {
                     const fallback = textureManager.getFallbackVisual().materials[0];
                     while (materials.length < 6) materials.push(fallback);
                 }
 
-                // Create an array of geometries positioned for each block, then merge
-                const geomInstances = groupBlocks.map((block) => {
-                    const geom = geometry.clone();
-                    geom.translate(
-                        block.x * BLOCK_SIZE - center.x,
-                        block.y * BLOCK_SIZE + BLOCK_SIZE / 2,
-                        block.z * BLOCK_SIZE - center.z
-                    );
-                    return geom;
-                });
-
-                let mergedGeom = null;
-                try {
-                    // Preserve groups so the 6-face material indices are retained
-                    mergedGeom = THREE.BufferGeometryUtils.mergeBufferGeometries(geomInstances, true);
-                } catch (e) {
-                    console.warn('mergeBufferGeometries failed, falling back to individual meshes', e);
-                }
-
-                if (mergedGeom) {
-                    const mergedMesh = new THREE.Mesh(mergedGeom, materials);
-                    // Mark layer as the first block's layer for filtering; filtering will check mesh.userData.layer
-                    mergedMesh.userData = { layer: layerY };
-                    blockGroup.add(mergedMesh);
-
-                    // If the merged mesh has no usable material maps, fallback to individual meshes
-                    const hasMaps = (Array.isArray(materials) ? materials : [materials]).some(m => m && m.map && m.map.image);
-                    if (!hasMaps) {
-                        // Remove merged mesh and add individual meshes so textures (if any) can be applied per-block
-                        blockGroup.remove(mergedMesh);
-                        groupBlocks.forEach((block) => {
-                            const mesh = new THREE.Mesh(geometry, materials);
-                            mesh.position.set(
-                                block.x * BLOCK_SIZE - center.x,
-                                block.y * BLOCK_SIZE + BLOCK_SIZE / 2,
-                                block.z * BLOCK_SIZE - center.z
-                            );
-                            mesh.userData = { layer: block.y };
-                            blockGroup.add(mesh);
-                        });
-                        console.warn(`Merged mesh for paletteIndex ${paletteIndex} layer ${layerY} had no texture maps — fell back to individual meshes.`);
-                    } else {
-                        // Debug collect material sources
-                        try {
-                            const matSources = (Array.isArray(materials) ? materials : [materials]).map(m => m?.map?.userData?.sourcePath || m?.userData?.sourcePath || null);
-                            debugMerged.push({ paletteIndex, layerY, materialSources: matSources });
-                        } catch (e) {
-                            console.warn('Failed to collect merged material sources', e);
-                        }
-                    }
-                } else {
-                    // Fallback: add individual meshes
-                    groupBlocks.forEach((block) => {
-                        const mesh = new THREE.Mesh(geometry, materials);
-                        mesh.position.set(
-                            block.x * BLOCK_SIZE - center.x,
-                            block.y * BLOCK_SIZE + BLOCK_SIZE / 2,
-                            block.z * BLOCK_SIZE - center.z
-                        );
-                        mesh.userData = { layer: block.y };
-                        blockGroup.add(mesh);
-                    });
-                }
+                const mesh = new THREE.Mesh(geometry, materials);
+                mesh.position.set(
+                    block.x * BLOCK_SIZE - center.x,
+                    block.y * BLOCK_SIZE + BLOCK_SIZE / 2,
+                    block.z * BLOCK_SIZE - center.z
+                );
+                mesh.userData = { layer: block.y };
+                blockGroup.add(mesh);
             });
-
-            if (debugMerged.length > 0) {
-                console.log('Merged meshes summary (paletteIndex, layerY, materialSources):', debugMerged.slice(0, 50));
-            }
 
             // Adjust grid size
             scene.remove(gridHelper);
