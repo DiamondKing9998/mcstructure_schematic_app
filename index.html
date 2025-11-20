@@ -485,11 +485,15 @@
             const states = paletteEntry.states || {};
             // Slabs: different color for top vs bottom
             if (name.includes('slab')) {
-                // Bedrock/Java names can use 'type' or 'half' or 'upper'
-                const t = states.type || states.half || states.shape || states.waterlogged || '';
-                // if 'top' or 'upper' appears, treat as top slab
-                if (String(t).toLowerCase().includes('top') || String(t).toLowerCase().includes('upper')) return '#f59e0b'; // amber for top slab
-                return '#d97706'; // darker amber for bottom slab
+                // Bedrock/Java names can use 'type', 'half', 'upper', or 'double'
+                const t = (states.type || states.half || states.shape || '').toLowerCase();
+                if (t.includes('top') || t.includes('upper')) return '#2563eb'; // blue for top slab
+                if (t.includes('bottom') || t.includes('lower')) return '#dc2626'; // red for bottom slab
+                if (t.includes('double')) return '#16a34a'; // green for double slab
+                // fallback: if state missing, alternate by block name
+                if (name.includes('top')) return '#2563eb';
+                if (name.includes('bottom')) return '#dc2626';
+                return '#d97706'; // orange for unknown/legacy slab
             }
             // Stairs: teal
             if (name.includes('stair')) return '#06b6d4';
