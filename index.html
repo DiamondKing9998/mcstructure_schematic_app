@@ -355,9 +355,8 @@
             // Clear and draw background
             ctx.clearRect(0, 0, cssW, cssH);
 
-            // Draw grid cells and fill with textures if available
-            ctx.save();
-            ctx.lineWidth = 1;
+            // Draw grid cells' background and textures first
+            const cellInfo = []; // store cell rectangles for later stroke-on-top
             for (let z = 0; z < sz; z++) {
                 for (let x = 0; x < sx; x++) {
                     // Center highlight
@@ -366,20 +365,18 @@
                     else if (sx % 2 === 0 && sz % 2 === 0) isCenter = (x === sx / 2 - 1 || x === sx / 2) && (z === sz / 2 - 1 || z === sz / 2);
                     else if (sx % 2 === 0) isCenter = (x === sx / 2 - 1 || x === sx / 2) && (z === Math.floor(sz / 2));
                     else if (sz % 2 === 0) isCenter = (z === sz / 2 - 1 || z === sz / 2) && (x === Math.floor(sx / 2));
-                    ctx.fillStyle = isCenter ? '#e0e7ef' : '#f3f4f6';
+                    const bgColor = isCenter ? '#e0e7ef' : '#f3f4f6';
                     const xPx = offX + x * cellW, yPx = offY + z * cellH;
+                    // fill base
+                    ctx.fillStyle = bgColor;
                     ctx.fillRect(xPx, yPx, cellW, cellH);
-                    ctx.strokeStyle = '#b6bbc7';
-                    ctx.strokeRect(xPx + 0.5, yPx + 0.5, cellW - 1, cellH - 1);
 
-                    // Draw texture preview if available
+                    // Draw texture preview if available (cover style)
                     const b = grid[z][x];
                     if (b) {
                         const img = palettePreviewImages[b.paletteIndex];
                         if (img && img.complete && img.naturalWidth) {
-                            // draw image to fit cell (cover style)
                             const iw = img.naturalWidth, ih = img.naturalHeight;
-                            // calculate cover scaling
                             const scale = Math.max(cellW / iw, cellH / ih);
                             const dw = iw * scale, dh = ih * scale;
                             const dx = xPx + (cellW - dw) / 2;
@@ -394,7 +391,20 @@
                             ctx.restore();
                         }
                     }
+
+                    // store rect for later stroke-on-top
+                    cellInfo.push({ xPx, yPx, cellW, cellH });
                 }
+            }
+
+            // Draw cell borders on top of textures so every cell has a visible border
+            ctx.save();
+            ctx.lineWidth = Math.max(1, Math.round(1 * (window.devicePixelRatio || 1)));
+            ctx.strokeStyle = '#2b3440'; // darker, higher contrast
+            for (let i = 0; i < cellInfo.length; i++) {
+                const c = cellInfo[i];
+                // use 0.5 offset to align crisp pixel strokes on canvas
+                ctx.strokeRect(c.xPx + 0.5, c.yPx + 0.5, c.cellW - 1, c.cellH - 1);
             }
             ctx.restore();
 
