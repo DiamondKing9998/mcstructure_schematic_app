@@ -401,10 +401,11 @@
                 console.warn('Palette diagnostic failed', e);
             }
 
-            // Create a mesh per block (simpler and less error-prone). Skip air entries to avoid invisible overdraw.
+            // InstancedMesh optimization: group blocks by paletteIndex
             let skippedAir = 0;
             let skippedOther = 0;
             let renderedBlocks = 0;
+            const blockGroups = {};
             blocks.forEach((block) => {
                 const paletteEntry = (palette && palette[block.paletteIndex]) || null;
                 const entryName = (paletteEntry && paletteEntry.name) ? String(paletteEntry.name).toLowerCase() : '';
@@ -412,28 +413,42 @@
                     skippedOther++;
                     return;
                 }
-                // If this palette entry is air, skip creating a mesh for it
                 if (/(^|:)air$/.test(entryName)) {
                     skippedAir++;
                     return;
                 }
+                if (!blockGroups[block.paletteIndex]) blockGroups[block.paletteIndex] = [];
+                blockGroups[block.paletteIndex].push(block);
+            });
 
-                const visual = paletteVisuals[block.paletteIndex] || textureManager.getFallbackVisual();
+            Object.keys(blockGroups).forEach((paletteIndexStr) => {
+                const paletteIndex = parseInt(paletteIndexStr, 10);
+                const group = blockGroups[paletteIndex];
+                if (!group || group.length === 0) return;
+                const visual = paletteVisuals[paletteIndex] || textureManager.getFallbackVisual();
                 let materials = Array.isArray(visual.materials) ? visual.materials.slice() : [];
                 if (materials.length < 6) {
                     const fallback = textureManager.getFallbackVisual().materials[0];
                     while (materials.length < 6) materials.push(fallback);
                 }
-
-                const mesh = new THREE.Mesh(geometry, materials);
-                mesh.position.set(
-                    block.x * BLOCK_SIZE - center.x,
-                    block.y * BLOCK_SIZE + BLOCK_SIZE / 2,
-                    block.z * BLOCK_SIZE - center.z
-                );
-                mesh.userData = { layer: block.y };
+                // Use only the first material for instancing (Three.js limitation)
+                const instMaterial = materials[0];
+                const instGeometry = geometry;
+                const mesh = new THREE.InstancedMesh(instGeometry, instMaterial, group.length);
+                let i = 0;
+                group.forEach((block) => {
+                    const matrix = new THREE.Matrix4();
+                    matrix.setPosition(
+                        block.x * BLOCK_SIZE - center.x,
+                        block.y * BLOCK_SIZE + BLOCK_SIZE / 2,
+                        block.z * BLOCK_SIZE - center.z
+                    );
+                    mesh.setMatrixAt(i, matrix);
+                    mesh.userData = { layer: block.y };
+                    i++;
+                    renderedBlocks++;
+                });
                 blockGroup.add(mesh);
-                renderedBlocks++;
             });
             console.log(`[DEBUG] buildStructure: Rendered blocks: ${renderedBlocks}, Skipped air: ${skippedAir}, Skipped other: ${skippedOther}, Total input blocks: ${blocks.length}`);
             if (skippedAir > 0) console.log(`Skipped creating ${skippedAir} air meshes during buildStructure.`);
