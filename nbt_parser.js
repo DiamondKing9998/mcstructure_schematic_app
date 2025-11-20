@@ -77,7 +77,13 @@ export async function parseMCStructureBinary(buffer) {
         if (parsedStructureData.structure) {
             console.log('[DEBUG] structure keys:', Object.keys(parsedStructureData.structure));
             if (parsedStructureData.structure.block_indices) {
-                console.log('[DEBUG] block_indices type:', typeof parsedStructureData.structure.block_indices, 'length:', parsedStructureData.structure.block_indices.length);
+                const bi = parsedStructureData.structure.block_indices;
+                console.log('[DEBUG] block_indices type:', typeof bi, 'keys:', Object.keys(bi), 'length:', bi.length);
+                // Print a sample of the first block_indices entry
+                const firstKey = Object.keys(bi)[0];
+                if (firstKey) {
+                    console.log(`[DEBUG] block_indices[${firstKey}] sample:`, Array.isArray(bi[firstKey]) ? bi[firstKey].slice(0, 20) : bi[firstKey]);
+                }
             }
         }
     }
