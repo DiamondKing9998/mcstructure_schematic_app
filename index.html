@@ -48,7 +48,7 @@
         <div class="bg-white p-6 rounded-xl shadow-2xl max-w-md w-full text-center">
             <h3 id="messageTitle" class="text-xl font-bold mb-3 text-red-600">Error</h3>
             <p id="messageText" class="text-gray-700 mb-4"></p>
-            <button onclick="document.getElementById('messageBox').classList.add('hidden')" class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-lg transition duration-200">
+            <button onclick="hideMessageBox()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-lg transition duration-200">
                 Acknowledge
             </button>
         </div>
@@ -114,6 +114,24 @@
         let isGridVisible = true;
 
         // --- CUSTOM UI FUNCTIONS ---
+        function withElement(id, callback) {
+            const el = document.getElementById(id);
+            if (!el) {
+                console.warn(`Element with id '${id}' not found in DOM.`);
+                return null;
+            }
+            if (typeof callback === 'function') {
+                callback(el);
+            }
+            return el;
+        }
+        function hideMessageBox() {
+            withElement('messageBox', (el) => el.classList.add('hidden'));
+        }
+        if (typeof window !== 'undefined') {
+            window.hideMessageBox = hideMessageBox;
+        }
+
         function showMessage(title, text, isError = true) {
             const box = document.getElementById('messageBox');
             const titleEl = document.getElementById('messageTitle');
@@ -146,14 +164,17 @@
          */
         function displayMaterialList(materials) {
             console.log("Building Material List.");
-            const listContainer = document.getElementById('material-list');
-            listContainer.innerHTML = '';
-            document.getElementById('materialEmpty').classList.add('hidden');
+            const listContainer = withElement('material-list', (el) => {
+                el.innerHTML = '';
+            });
+            withElement('materialEmpty', (el) => el.classList.add('hidden'));
 
             const sortedMaterials = Object.entries(materials).sort(([, a], [, b]) => b - a);
 
             if (sortedMaterials.length === 0) {
-                listContainer.innerHTML = '<p class="text-sm text-gray-500">No solid blocks found in the structure data.</p>';
+                if (listContainer) {
+                    listContainer.innerHTML = '<p class="text-sm text-gray-500">No solid blocks found in the structure data.</p>';
+                }
                 console.warn("Material list is empty.");
                 return;
             }
@@ -172,7 +193,9 @@
                         <span class="block text-xs text-gray-500">${count} total (Mocked)</span>
                     </div>
                 `;
-                listContainer.appendChild(listItem);
+                if (listContainer) {
+                    listContainer.appendChild(listItem);
+                }
             });
             console.log(`Material list built with ${sortedMaterials.length} unique items.`);
         }
@@ -181,7 +204,8 @@
          * Initializes the Three.js scene, camera, and controls.
          */
         function initThreeJS() {
-            const container = document.getElementById('canvas-container');
+            const container = withElement('canvas-container');
+            if (!container) return;
             const width = container.clientWidth;
             const height = container.clientHeight;
 
@@ -220,7 +244,8 @@
          * Resizes the Three.js renderer and camera.
          */
         function onWindowResize() {
-            const container = document.getElementById('canvas-container');
+            const container = withElement('canvas-container');
+            if (!container) return;
             const width = container.clientWidth;
             const height = container.clientHeight;
 
@@ -287,7 +312,9 @@
          */
         function filterByLayer(layer) {
             currentLayer = layer;
-            document.getElementById('currentLayerDisplay').textContent = layer === maxLayer ? 'All' : layer;
+            withElement('currentLayerDisplay', (el) => {
+                el.textContent = layer === maxLayer ? 'All' : layer;
+            });
             console.log(`Layer filter set to: ${layer}`);
 
             if (!blockGroup) return;
@@ -310,7 +337,8 @@
             
             console.log(`Starting file processing for: ${file.name} (${file.size} bytes)`);
 
-            document.getElementById('fileInput').value = '';
+            const fileInputEl = document.getElementById('fileInput');
+            if (fileInputEl) fileInputEl.value = '';
             const loadingMessageEl = document.getElementById('loadingMessage');
             if (loadingMessageEl) {
                 loadingMessageEl.classList.remove('hidden');
@@ -335,10 +363,14 @@
                     displayMaterialList(structureData.materials);
 
                     const slider = document.getElementById('layerSlider');
-                    slider.min = 0;
-                    slider.max = maxLayer;
-                    slider.value = maxLayer; 
-                    document.getElementById('currentLayerDisplay').textContent = 'All';
+                    if (slider) {
+                        slider.min = 0;
+                        slider.max = maxLayer;
+                        slider.value = maxLayer; 
+                    } else {
+                        console.warn("#layerSlider element not found in DOM.");
+                    }
+                    withElement('currentLayerDisplay', (el) => { el.textContent = 'All'; });
 
                     buildStructure(structureData);
                     
@@ -375,7 +407,7 @@
             
             reader.onerror = (e) => {
                 console.error("FileReader Error:", e);
-                document.getElementById('loadingMessage').classList.add('hidden');
+                withElement('loadingMessage', (el) => el.classList.add('hidden'));
                 showMessage("File Read Error", "The browser could not read the file. This might be due to file permissions or corruption.", true);
             };
 
@@ -397,18 +429,28 @@
             }
 
             const slider = document.getElementById('layerSlider');
-            slider.addEventListener('input', (e) => {
-                const layer = parseInt(e.target.value, 10);
-                filterByLayer(layer);
-            });
+            if (slider) {
+                slider.addEventListener('input', (e) => {
+                    const layer = parseInt(e.target.value, 10);
+                    filterByLayer(layer);
+                });
+            } else {
+                console.warn("#layerSlider element not found in DOM.");
+            }
 
             const toggleGridButton = document.getElementById('toggleGrid');
-            toggleGridButton.addEventListener('click', () => {
-                isGridVisible = !isGridVisible;
-                gridHelper.visible = isGridVisible;
-                toggleGridButton.textContent = isGridVisible ? 'Hide Grid' : 'Show Grid';
-                console.log(`Grid visibility toggled to: ${isGridVisible}`);
-            });
+            if (toggleGridButton) {
+                toggleGridButton.addEventListener('click', () => {
+                    isGridVisible = !isGridVisible;
+                    if (gridHelper) {
+                        gridHelper.visible = isGridVisible;
+                    }
+                    toggleGridButton.textContent = isGridVisible ? 'Hide Grid' : 'Show Grid';
+                    console.log(`Grid visibility toggled to: ${isGridVisible}`);
+                });
+            } else {
+                console.warn("#toggleGrid element not found in DOM.");
+            }
         };
     </script>
 </body>
