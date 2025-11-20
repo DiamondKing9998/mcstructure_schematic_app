@@ -1,3 +1,10 @@
+        // Restore default cube geometry function for fallback
+        function getSharedCubeGeometry() {
+            if (!sharedCubeGeometry) {
+                sharedCubeGeometry = new THREE.BoxGeometry(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+            }
+            return sharedCubeGeometry;
+        }
 <!DOCTYPE html>
 <html lang="en">
 <head>
