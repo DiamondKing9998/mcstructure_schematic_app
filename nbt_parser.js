@@ -148,27 +148,34 @@ function buildPalette(structureSection) {
 
 function buildBlocks(structureSection, size, paletteLength) {
     // block_indices is an array of layers (each layer is a flattened X*Z plane) -- iterate every layer
-    const blockIndicesLayers = structureSection.block_indices ?? [];
+    const blockIndices = structureSection.block_indices ?? [];
     const areaXZ = size.x * size.z;
     const blocks = [];
 
-    // Debug: log number of layers and expected Y size
-    console.log(`[DEBUG] buildBlocks: block_indices layers: ${blockIndicesLayers.length}, expected Y size: ${size.y}`);
+    // Support both array and object (Bedrock format)
+    let layers = [];
+    if (Array.isArray(blockIndices)) {
+        layers = blockIndices.map((layer, i) => ({ y: i, data: layer }));
+    } else if (typeof blockIndices === 'object' && blockIndices !== null) {
+        // Object with string keys for Y layers
+        layers = Object.keys(blockIndices)
+            .map(k => ({ y: parseInt(k, 10), data: blockIndices[k] }))
+            .sort((a, b) => a.y - b.y);
+    }
 
-    for (let y = 0; y < blockIndicesLayers.length; y++) {
-        const layer = blockIndicesLayers[y] ?? [];
-        // Only iterate up to the expected plane size for safety
+    // Debug: log number of layers and expected Y size
+    console.log(`[DEBUG] buildBlocks: block_indices layers: ${layers.length}, expected Y size: ${size.y}`);
+
+    for (const { y, data: layer } of layers) {
+        if (!Array.isArray(layer)) continue;
         const limit = Math.min(layer.length, areaXZ);
         for (let idx = 0; idx < limit; idx++) {
             const paletteIndex = toNumber(layer[idx]);
-            // Accept paletteIndex 0 as valid; ensure it is within [0, paletteLength)
             if (!Number.isFinite(paletteIndex) || paletteIndex < 0 || paletteIndex >= paletteLength) {
                 continue;
             }
-
             const z = Math.floor(idx / size.x);
             const x = idx % size.x;
-
             blocks.push({ x, y, z, paletteIndex });
         }
     }
