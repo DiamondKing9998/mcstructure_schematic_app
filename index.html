@@ -10,8 +10,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <!-- Load OrbitControls for camera interaction -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-    <!-- Load Pako for Gzip decompression (Required for .mcstructure files) -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako_inflate.min.js"></script>
     <style>
         /* Custom styles for better aesthetics and layout */
         body { font-family: 'Inter', sans-serif; background-color: #f7f9fb; }
@@ -97,39 +95,13 @@
         </aside>
     </main>
 
-    <script>
+    <script type="module">
+        // Import the parsing function from the dedicated module
+        import { parseMCStructureBinary, MOCK_BLOCK_DATA } from './nbt_parser.js';
+        
         // --- CONSTANTS AND GLOBALS ---
-        const BLOCK_SIZE = 1; // Size of one Minecraft block in Three.js units
+        const BLOCK_SIZE = 1; 
         const STACK_SIZE = 64;
-
-        // Mock Block Data for visualization and material calculation (replace with NBT parsing output)
-        const MOCK_BLOCK_DATA = {
-            materials: {
-                'minecraft:stone': 512,
-                'minecraft:cobblestone': 256,
-                'minecraft:dirt': 128,
-                'minecraft:planks:2': 64, // E.g., Spruce Planks
-                'minecraft:glass': 32,
-                'minecraft:beacon': 1,
-            },
-            blocks: [
-                // Mock block structure (x, y, z, block_id, color_hex, layer_index)
-                // y is the layer index
-                { x: 0, y: 0, z: 0, id: 'minecraft:stone', color: 0x888888, layer: 0 },
-                { x: 1, y: 0, z: 0, id: 'minecraft:stone', color: 0x888888, layer: 0 },
-                { x: 2, y: 0, z: 0, id: 'minecraft:stone', color: 0x888888, layer: 0 },
-                { x: 1, y: 1, z: 1, id: 'minecraft:dirt', color: 0x964b00, layer: 1 },
-                { x: 2, y: 1, z: 2, id: 'minecraft:glass', color: 0x00ffff, layer: 1 },
-                { x: 0, y: 2, z: 1, id: 'minecraft:beacon', color: 0xff0000, layer: 2 },
-                { x: 1, y: 2, z: 1, id: 'minecraft:planks:2', color: 0xa0522d, layer: 2 },
-                // Add more blocks...
-                { x: 0, y: 3, z: 0, id: 'minecraft:cobblestone', color: 0x555555, layer: 3 },
-                { x: 1, y: 3, z: 0, id: 'minecraft:cobblestone', color: 0x555555, layer: 3 },
-                { x: 0, y: 4, z: 0, id: 'minecraft:cobblestone', color: 0x555555, layer: 4 },
-                { x: 1, y: 4, z: 0, id: 'minecraft:cobblestone', color: 0x555555, layer: 4 },
-            ],
-            size: { x: 3, y: 5, z: 3 } // Max dimensions
-        };
 
         // Three.js Globals
         let scene, camera, renderer, controls, blockGroup, gridHelper;
@@ -138,14 +110,7 @@
         let currentLayer = 0;
         let isGridVisible = true;
 
-        // --- CUSTOM UI FUNCTIONS ---
-
-        /**
-         * Displays a custom message box (replaces alert()).
-         * @param {string} title - The title of the message box.
-         * @param {string} text - The body content of the message box (can include HTML/Markdown).
-         * @param {boolean} isError - If true, displays error style (red); otherwise, success style (indigo).
-         */
+        // --- CUSTOM UI FUNCTIONS (showMessage is unchanged) ---
         function showMessage(title, text, isError = true) {
             const box = document.getElementById('messageBox');
             const titleEl = document.getElementById('messageTitle');
@@ -153,9 +118,8 @@
             const buttonEl = box.querySelector('button');
 
             titleEl.textContent = title;
-            textEl.innerHTML = text; // Use innerHTML for formatting
+            textEl.innerHTML = text; 
 
-            // Toggle colors for error/success states
             titleEl.classList.toggle('text-red-600', isError);
             titleEl.classList.toggle('text-indigo-600', !isError);
             buttonEl.classList.toggle('bg-red-500', isError);
@@ -166,60 +130,7 @@
             box.classList.remove('hidden');
         }
 
-
         // --- CORE APPLICATION FUNCTIONS ---
-
-        /**
-         * Attempts to parse the .mcstructure file (Gzip decompression + NBT mock).
-         * @param {ArrayBuffer} buffer - The raw file content.
-         * @returns {Promise<object>} - A promise resolving to the structure data.
-         */
-        async function parseStructure(buffer) {
-            console.log("--- Starting parseStructure (Step 2: Decompression) ---");
-            document.getElementById('loadingMessage').classList.remove('hidden');
-            let decompressedData;
-
-            try {
-                // Step 1: Decompress Gzip (mcstructure files are Gzip-compressed NBT)
-                const compressedData = new Uint8Array(buffer);
-                
-                // Check if pako is loaded
-                if (typeof pako === 'undefined' || !pako.inflate) {
-                    console.error("Dependency Error: Pako library not loaded.");
-                    throw new Error("Pako library (Gzip decompressor) is missing or failed to load.");
-                }
-
-                // Attempt Gzip decompression
-                decompressedData = pako.inflate(compressedData);
-                console.log(`Success: File decompressed. Size (Compressed: ${compressedData.length} bytes, Decompressed: ${decompressedData.length} bytes).`);
-
-            } catch (e) {
-                // Catch decompression errors (e.g., if the file isn't Gzip-compressed or is corrupted)
-                console.error("Gzip Decompression Failed:", e);
-                // Re-throw a user-friendly error to be caught by handleFileSelect
-                throw new Error(`Decompression Error: The file could not be unpacked. It might be corrupted or not a standard Gzip-compressed format. (${e.message})`);
-            }
-            
-            // --- REAL-WORLD NBT PARSING WOULD GO HERE ---
-            // Step 2: NBT Parsing (Requires specialized library, currently mocked)
-            console.log("Starting Step 3: NBT Parsing (MOCK) - Simulate binary parsing to extract block data.");
-            
-            await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate parsing time
-
-            // Use the mock data for demonstration
-            const data = MOCK_BLOCK_DATA;
-            maxLayer = data.size.y - 1;
-            currentLayer = maxLayer;
-            
-            console.log("MOCK Data Loaded. Structure Size:", data.size);
-            console.log("--- parseStructure Complete ---");
-
-            document.getElementById('loadingMessage').classList.add('hidden');
-            document.getElementById('emptyState').classList.add('hidden');
-            document.getElementById('layerControls').classList.remove('hidden');
-
-            return data;
-        }
 
         /**
          * Calculates material counts, rounds them up to stacks, and displays the list.
@@ -241,9 +152,8 @@
 
             sortedMaterials.forEach(([id, count]) => {
                 const totalStacks = Math.ceil(count / STACK_SIZE);
-                // ... rest of list generation logic ...
                 const stacksDisplay = `${totalStacks} stack${totalStacks !== 1 ? 's' : ''}`;
-                const baseId = id.split(':')[1] || id; // Clean up the ID for display
+                const baseId = id.split(':')[1] || id; 
 
                 const listItem = document.createElement('div');
                 listItem.className = 'flex justify-between items-center p-2 mb-1 bg-white rounded-md shadow-sm border-l-4 border-indigo-400';
@@ -251,7 +161,7 @@
                     <span class="font-medium text-gray-800">${baseId.replace(/_/g, ' ').toUpperCase()}</span>
                     <div class="text-right">
                         <span class="block text-sm font-bold text-indigo-600">${stacksDisplay}</span>
-                        <span class="block text-xs text-gray-500">${count} total</span>
+                        <span class="block text-xs text-gray-500">${count} total (Mocked)</span>
                     </div>
                 `;
                 listContainer.appendChild(listItem);
@@ -263,51 +173,41 @@
          * Initializes the Three.js scene, camera, and controls.
          */
         function initThreeJS() {
-            // ... Three.js initialization logic (unchanged)
             const container = document.getElementById('canvas-container');
             const width = container.clientWidth;
             const height = container.clientHeight;
 
-            // Scene
+            // Scene setup... (unchanged)
             scene = new THREE.Scene();
-
-            // Camera
             camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
             camera.position.set(20, 20, 20);
 
-            // Renderer
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(width, height);
             container.appendChild(renderer.domElement);
 
-            // Controls
             controls = new THREE.OrbitControls(camera, renderer.domElement);
-            controls.enableDamping = true; // smooth rotation
+            controls.enableDamping = true; 
             controls.dampingFactor = 0.05;
             controls.minDistance = 5;
             controls.maxDistance = 100;
 
-            // Lighting
-            scene.add(new THREE.AmbientLight(0x404040)); // Soft white light
+            scene.add(new THREE.AmbientLight(0x404040)); 
             const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
             directionalLight.position.set(10, 10, 10);
             scene.add(directionalLight);
 
-            // Group to hold all blocks
             blockGroup = new THREE.Group();
             scene.add(blockGroup);
 
-            // Grid Helper (initially large, resized later)
             gridHelper = new THREE.GridHelper(50, 50, 0x444444, 0x444444);
-            gridHelper.position.y = -BLOCK_SIZE / 2; // Place slightly below the first layer
+            gridHelper.position.y = -BLOCK_SIZE / 2; 
             scene.add(gridHelper);
 
-            // Handle window resize
             window.addEventListener('resize', onWindowResize, false);
             console.log("Three.js environment initialized.");
         }
 
-        // ... other Three.js functions (animate, onWindowResize, buildStructure, filterByLayer) ...
         /**
          * Resizes the Three.js renderer and camera.
          */
@@ -326,7 +226,7 @@
          */
         function animate() {
             requestAnimationFrame(animate);
-            controls.update(); // only required if controls.enableDamping = true
+            controls.update(); 
             renderer.render(scene, camera);
         }
 
@@ -336,7 +236,6 @@
          */
         function buildStructure(data) {
             console.log("Building 3D structure visualization.");
-            // Clear existing blocks
             while (blockGroup.children.length > 0) {
                 blockGroup.remove(blockGroup.children[0]);
             }
@@ -347,23 +246,20 @@
             const geometry = new THREE.BoxGeometry(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
 
             blocks.forEach(block => {
-                // Instancing is better for performance, but simple Mesh approach here for clarity
                 const material = new THREE.MeshLambertMaterial({ color: block.color });
                 const mesh = new THREE.Mesh(geometry, material);
 
-                // Position the block, centered in the scene
                 mesh.position.set(
                     block.x * BLOCK_SIZE - center.x,
                     block.y * BLOCK_SIZE + BLOCK_SIZE / 2,
                     block.z * BLOCK_SIZE - center.z
                 );
-                // Store metadata for filtering
                 mesh.userData = { layer: block.layer };
 
                 blockGroup.add(mesh);
             });
 
-            // Adjust grid size to structure size
+            // Adjust grid size
             scene.remove(gridHelper);
             const gridRange = Math.max(size.x, size.z) * BLOCK_SIZE;
             gridHelper = new THREE.GridHelper(gridRange, gridRange, 0x444444, 0x444444);
@@ -371,7 +267,7 @@
             gridHelper.visible = isGridVisible;
             scene.add(gridHelper);
 
-            // Recenter camera view to the structure
+            // Recenter camera view
             controls.target.set(0, size.y * BLOCK_SIZE / 2, 0);
             controls.update();
             console.log(`3D structure built. Dimensions: ${size.x}x${size.y}x${size.z}`);
@@ -390,7 +286,6 @@
 
             blockGroup.children.forEach(mesh => {
                 const blockLayer = mesh.userData.layer;
-                // Show the block if its layer index is less than or equal to the current filter layer
                 mesh.visible = blockLayer <= currentLayer;
             });
         }
@@ -399,48 +294,47 @@
 
         /**
          * Main entry point for file processing.
-         * @param {Event} event - The file input change event.
+         * Calls the external parseMCStructureBinary function.
          */
         async function handleFileSelect(event) {
             const file = event.target.files[0];
-            if (!file) {
-                console.log("File selection cancelled.");
-                return;
-            }
+            if (!file) return;
             
             console.log(`Starting file processing for: ${file.name} (${file.size} bytes)`);
 
-            // Clear previous selection visually and start loading state
             document.getElementById('fileInput').value = '';
             document.getElementById('loadingMessage').classList.remove('hidden');
 
-
-            // 1. Read the file content as a binary buffer
             const reader = new FileReader();
             reader.onload = async (e) => {
                 console.log("FileReader completed reading file into ArrayBuffer.");
                 try {
                     const buffer = e.target.result;
                     
-                    // 2. Parse the structure data (Tries Gzip decompression, then uses mock NBT)
-                    structureData = await parseStructure(buffer);
+                    // Call the dedicated parsing module
+                    await parseMCStructureBinary(buffer);
 
-                    // 3. Update UI elements
+                    // Since true parsing is complex, we stick to mock data for visualization
+                    structureData = MOCK_BLOCK_DATA;
+                    maxLayer = structureData.size.y - 1;
+                    currentLayer = maxLayer;
+
+
                     displayMaterialList(structureData.materials);
 
-                    // 4. Update Layer Slider
                     const slider = document.getElementById('layerSlider');
                     slider.min = 0;
                     slider.max = maxLayer;
-                    slider.value = maxLayer; // Default to showing all layers
+                    slider.value = maxLayer; 
                     document.getElementById('currentLayerDisplay').textContent = 'All';
 
-                    // 5. Build and render the 3D structure
                     buildStructure(structureData);
                     
                     document.getElementById('loadingMessage').classList.add('hidden');
-                    showMessage("File Loaded (Gzip Decompressed)", `The file **${file.name}** was successfully decompressed (Gzip).<br><br>The next step, **NBT (Named Binary Tag) Parsing**, requires a complex library like *Prismarine-NBT* that cannot be loaded via a simple CDN. The app is currently displaying a mock structure and material list.`, false);
-
+                    showMessage("Parsing Attempt Complete", 
+                        `The Gzip decompression and NBT header read succeeded for **${file.name}**!
+                        <p class="text-left mt-3">The complex NBT block data parsing (Step 3) is still mocked due to library complexity. The app is displaying placeholder data, but your file passed the binary integrity check.</p>`, 
+                        false);
 
                 } catch (error) {
                     document.getElementById('loadingMessage').classList.add('hidden');
@@ -450,7 +344,7 @@
                     const errorMessage = `The file **${file.name}** failed to load.
                     
                     <p class="text-left mt-3">**Reason:** ${error.message}</p>
-                    <p class="text-left mt-3">The .mcstructure format requires complex Gzip decompression and NBT (Named Binary Tag) parsing. This app is currently able to use placeholder data, but your file appears to have failed the initial decompression step. Please ensure your file is not corrupted and is a valid Bedrock Edition structure file.</p>
+                    <p class="text-left mt-3">Please check the console logs for detailed step failures (Gzip or NBT Header Check).</p>
                     `;
                     showMessage("Structure File Error", errorMessage, true);
                 }
@@ -466,21 +360,17 @@
         }
 
         // --- INITIALIZATION ---
-
-        // Wait for the window to load before starting Three.js
         window.onload = function () {
             console.log("Application started. Initializing Three.js.");
             initThreeJS();
             animate();
 
-            // Set up Layer Slider Listener
             const slider = document.getElementById('layerSlider');
             slider.addEventListener('input', (e) => {
                 const layer = parseInt(e.target.value, 10);
                 filterByLayer(layer);
             });
 
-            // Set up Grid Toggle Listener
             const toggleGridButton = document.getElementById('toggleGrid');
             toggleGridButton.addEventListener('click', () => {
                 isGridVisible = !isGridVisible;
