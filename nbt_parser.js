@@ -1,5 +1,7 @@
 // NBT Parsing Logic Module
-// Dependencies: pako (via CDN in index.html), NBT (via nbt.min.js)
+// Dependencies: pako (via CDN in index.html), NBT module (via nbt.min.js)
+
+import { NBT } from './nbt.min.js';
 
 /**
  * Core function to handle binary structure parsing (Gzip decompression and NBT parsing).
@@ -17,10 +19,6 @@ export async function parseMCStructureBinary(buffer) {
     console.log("--- NBT Parser: Starting File Integrity Check ---");
     let decompressedData;
     let parsedStructureData;
-
-    if (typeof NBT === 'undefined' || !NBT.parse) {
-        throw new Error("NBT parser library (nbt.min.js) is required but not loaded.");
-    }
 
     const looksGzipped = isGzipCompressed(buffer);
 
