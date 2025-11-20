@@ -478,6 +478,7 @@
                             ix * BLOCK_SIZE - center.x, 0, iz * BLOCK_SIZE - center.z,
                             ix * BLOCK_SIZE - center.x, (sy - 1) * BLOCK_SIZE + BLOCK_SIZE, iz * BLOCK_SIZE - center.z
                         );
+                    }
                 }
                 const vertGeo = new THREE.BufferGeometry();
                 vertGeo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
