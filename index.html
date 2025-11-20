@@ -447,8 +447,8 @@
                         // Slab debug info
                         if ((p?.name || '').toLowerCase().includes('slab')) {
                             borderColor = getCellBorderColor(b, p);
-                            const t = (p.states?.type || p.states?.half || p.states?.vertical_half || p.states?.shape || '').toLowerCase();
-                            const vertical = (p.states?.vertical_half || '').toLowerCase();
+                            const t = getStateValue(p.states, ['type','half','vertical_half','shape']);
+                            const vertical = getStateValue(p.states, ['vertical_half','half','type']);
                             let slabType = 'unknown';
                             if (vertical === 'top') slabType = 'top';
                             else if (vertical === 'bottom') slabType = 'bottom';
@@ -495,6 +495,20 @@
             return '#'+('00000'.substring(0,6-c.length))+c;
         }
 
+        // Helper to retrieve a state value by possible names, tolerant of namespaced keys
+        function getStateValue(states, names) {
+            if (!states || typeof states !== 'object') return '';
+            const keys = Object.keys(states || {});
+            for (const name of names) {
+                // exact match
+                if (name in states) return String(states[name]).toLowerCase();
+                // namespaced match (e.g. 'minecraft:vertical_half')
+                const found = keys.find(k => k.toLowerCase().endsWith(':' + name) || k.toLowerCase() === name || k.toLowerCase().includes(name));
+                if (found) return String(states[found]).toLowerCase();
+            }
+            return '';
+        }
+
         // Determine border color for a cell based on its block type and states
         function getCellBorderColor(block, paletteEntry) {
             // air: subtle gray
@@ -504,8 +518,8 @@
             // Slabs: different color for top vs bottom
             if (name.includes('slab')) {
                 // Bedrock/Java names can use 'type', 'half', 'vertical_half', 'upper', or 'double'
-                const t = (states.type || states.half || states.vertical_half || states.shape || '').toLowerCase();
-                const vertical = (states.vertical_half || '').toLowerCase();
+                const t = getStateValue(states, ['type','half','vertical_half','shape']);
+                const vertical = getStateValue(states, ['vertical_half','half','type']);
                 if (vertical === 'top') return '#2563eb'; // blue for top slab
                 if (vertical === 'bottom') return '#dc2626'; // red for bottom slab
                 if (t.includes('top') || t.includes('upper')) return '#2563eb';
