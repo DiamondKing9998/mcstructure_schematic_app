@@ -105,25 +105,27 @@ function buildPalette(structureSection) {
 }
 
 function buildBlocks(structureSection, size, paletteLength) {
+    // block_indices is an array of layers (each layer is a flattened X*Z plane) -- iterate every layer
     const blockIndicesLayers = structureSection.block_indices ?? [];
-    const primaryLayer = blockIndicesLayers[0] ?? [];
-    const totalBlocks = size.x * size.y * size.z;
-    const limit = Math.min(primaryLayer.length, totalBlocks);
     const areaXZ = size.x * size.z;
     const blocks = [];
 
-    for (let idx = 0; idx < limit; idx++) {
-        const paletteIndex = toNumber(primaryLayer[idx]);
-        if (!Number.isFinite(paletteIndex) || paletteIndex <= 0 || paletteIndex >= paletteLength) {
-            continue;
+    for (let y = 0; y < blockIndicesLayers.length; y++) {
+        const layer = blockIndicesLayers[y] ?? [];
+        // Only iterate up to the expected plane size for safety
+        const limit = Math.min(layer.length, areaXZ);
+        for (let idx = 0; idx < limit; idx++) {
+            const paletteIndex = toNumber(layer[idx]);
+            // Accept paletteIndex 0 as valid; ensure it is within [0, paletteLength)
+            if (!Number.isFinite(paletteIndex) || paletteIndex < 0 || paletteIndex >= paletteLength) {
+                continue;
+            }
+
+            const z = Math.floor(idx / size.x);
+            const x = idx % size.x;
+
+            blocks.push({ x, y, z, paletteIndex });
         }
-
-        const y = Math.floor(idx / areaXZ);
-        const rem = idx % areaXZ;
-        const z = Math.floor(rem / size.x);
-        const x = rem % size.x;
-
-        blocks.push({ x, y, z, paletteIndex });
     }
 
     return blocks;

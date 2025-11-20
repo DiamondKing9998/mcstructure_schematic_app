@@ -339,6 +339,25 @@ export class ResourcePackTextureManager {
                 const texture = await this.loadTextureFromUrl(objectUrl, loader);
                 texture.userData = texture.userData || {};
                 texture.userData.sourcePath = candidatePath;
+                // Try to generate a stable preview data URL for thumbnails when possible
+                try {
+                    const img = texture.image;
+                    if (img instanceof HTMLImageElement) {
+                        // draw to canvas to create a data URL
+                        const canvas = document.createElement('canvas');
+                        canvas.width = img.naturalWidth || img.width || 16;
+                        canvas.height = img.naturalHeight || img.height || 16;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                        texture.userData.previewSrc = canvas.toDataURL();
+                    } else if (img instanceof HTMLCanvasElement) {
+                        texture.userData.previewSrc = img.toDataURL();
+                    }
+                } catch (e) {
+                    // Non-fatal: preview generation failed
+                    console.warn('Failed to generate preview data URL for', candidatePath, e);
+                }
+
                 return texture;
             } finally {
                 URL.revokeObjectURL(objectUrl);
