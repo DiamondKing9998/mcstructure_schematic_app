@@ -444,6 +444,13 @@
                         if (p?.states && Object.keys(p.states).length) {
                             html += `<br><b>Data:</b> ` + Object.entries(p.states).map(([k, v]) => `${k}: ${v}`).join(', ');
                         }
+                        // Interpret facing states (numeric or named) and show a human readable direction
+                        const facingDir = interpretFacing(p?.states);
+                        if (facingDir) {
+                            const arrows = { north: '↑', south: '↓', east: '→', west: '←', up: '▲', down: '▼' };
+                            const arrow = arrows[facingDir] || '';
+                            html += `<br><b>Facing:</b> ${facingDir}${arrow ? ' ' + arrow : ''}`;
+                        }
                         // Slab debug info
                         if ((p?.name || '').toLowerCase().includes('slab')) {
                             borderColor = getCellBorderColor(b, p);
@@ -507,6 +514,30 @@
                 if (found) return String(states[found]).toLowerCase();
             }
             return '';
+        }
+
+        // Interpret facing states and return a human readable direction (cardinal or up/down)
+        function interpretFacing(states) {
+            if (!states) return '';
+            // look for common facing keys
+            const keyNames = ['facing_direction','facing','horizontal_facing','rotation','direction','facing_axis'];
+            const val = getStateValue(states, keyNames);
+            if (!val) return '';
+            // if it's already a named direction, return it normalized
+            const named = val.toLowerCase();
+            const simpleNames = ['north','south','east','west','up','down','left','right'];
+            if (simpleNames.includes(named)) return named;
+            // if numeric, map using common Bedrock/structure conventions
+            const n = parseInt(named, 10);
+            if (!Number.isNaN(n)) {
+                // Common mapping for facing_direction in some Bedrock schemas:
+                // 0: south, 1: west, 2: north, 3: east
+                const map043 = {0:'south',1:'west',2:'north',3:'east',4:'up',5:'down'};
+                if (n in map043) return map043[n];
+                // fallback: modulo 4
+                return map043[n % 4] || '';
+            }
+            return val;
         }
 
         // Determine border color for a cell based on its block type and states
