@@ -494,12 +494,24 @@ export class ResourcePackTextureManager {
             return new THREE.MeshStandardMaterial({ color: 0x8e8e8e });
         }
 
+        // Ensure texture encoding and update flags are correct for consistent display
+        try {
+            texture.encoding = THREE.sRGBEncoding;
+            texture.needsUpdate = true;
+        } catch (e) {
+            // Non-fatal, continue with best-effort
+            console.warn('createMaterial: failed to set texture encoding', e);
+        }
+
         const materialOptions = {
             map: texture,
+            color: 0xffffff,
+            metalness: 0.0,
+            roughness: 1.0,
             transparent: renderMethod !== 'opaque',
             alphaTest: renderMethod === 'alpha_test' ? 0.5 : 0,
             depthWrite: renderMethod !== 'blend',
-            side: renderMethod === 'double_sided' ? THREE.DoubleSide : THREE.FrontSide,
+            side: THREE.DoubleSide,
         };
 
         if (renderMethod === 'blend') {
@@ -507,7 +519,18 @@ export class ResourcePackTextureManager {
             materialOptions.depthWrite = false;
         }
 
-        return new THREE.MeshStandardMaterial(materialOptions);
+        const mat = new THREE.MeshStandardMaterial(materialOptions);
+        // Defensive: ensure the material and its map are updated so the renderer picks up the texture
+        try {
+            if (mat.map) {
+                mat.map.encoding = THREE.sRGBEncoding;
+                mat.map.needsUpdate = true;
+            }
+            mat.needsUpdate = true;
+        } catch (e) {
+            console.warn('createMaterial: failed to finalize material updates', e);
+        }
+        return mat;
     }
 
     getFallbackVisual() {
