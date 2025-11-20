@@ -838,7 +838,13 @@
 
             if (previewModeCheckbox) {
                 previewModeCheckbox.addEventListener('change', () => {
-                    if (previewModeCheckbox.checked) enablePreviewMode(); else disablePreviewMode();
+                    if (previewModeCheckbox.checked) {
+                        enablePreviewMode();
+                        // also reveal all layers for the preview to be comprehensive
+                        try { document.getElementById('showAllLayers')?.click(); } catch(e) {}
+                    } else {
+                        disablePreviewMode();
+                    }
                 });
             }
 
