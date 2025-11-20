@@ -126,6 +126,7 @@
                 <div class="flex gap-2 items-center mb-2">
                     <label class="flex items-center gap-2 text-sm text-gray-600"><input id="enableLayerFilter" type="checkbox" class="w-4 h-4" checked> Enable Layer Filter</label>
                     <label class="flex items-center gap-2 text-sm text-gray-600"><input id="enableMerging" type="checkbox" class="w-4 h-4" checked> Merge Geometries</label>
+                    <label class="flex items-center gap-2 text-sm text-gray-600"><input id="previewModeCheckbox" type="checkbox" class="w-4 h-4"> Preview Mode (no lighting)</label>
                     <button id="showAllLayers" class="ml-auto text-xs bg-indigo-600 hover:bg-indigo-700 text-white py-1 px-3 rounded-full transition">Show All</button>
                 </div>
 
@@ -786,6 +787,49 @@
             const topInput = document.getElementById('layerTopInput');
             const enableFilter = document.getElementById('enableLayerFilter');
             const showAllBtn = document.getElementById('showAllLayers');
+            const previewModeCheckbox = document.getElementById('previewModeCheckbox');
+
+            // Preview Mode state storage for restoring original materials
+            window._previewModeState = window._previewModeState || { enabled: false, originalMaterials: new WeakMap() };
+
+            function enablePreviewMode() {
+                const bg = window._app?.blockGroup;
+                if (!bg) return;
+                window._previewModeState.enabled = true;
+                bg.children.forEach(mesh => {
+                    if (!mesh.visible) return;
+                    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+                    // store original materials once
+                    if (!window._previewModeState.originalMaterials.has(mesh)) {
+                        window._previewModeState.originalMaterials.set(mesh, mesh.material);
+                    }
+                    const newMats = mats.map(m => {
+                        const map = m?.map || null;
+                        return map ? new THREE.MeshBasicMaterial({ map: map, side: THREE.DoubleSide, transparent: m.transparent || false }) : new THREE.MeshBasicMaterial({ color: 0x999999 });
+                    });
+                    mesh.material = Array.isArray(mesh.material) ? newMats : newMats[0];
+                });
+                console.log('Preview Mode enabled: replaced visible meshes with MeshBasicMaterial.');
+            }
+
+            function disablePreviewMode() {
+                const bg = window._app?.blockGroup;
+                if (!bg) return;
+                window._previewModeState.enabled = false;
+                bg.children.forEach(mesh => {
+                    if (!window._previewModeState.originalMaterials.has(mesh)) return;
+                    const orig = window._previewModeState.originalMaterials.get(mesh);
+                    mesh.material = orig;
+                    window._previewModeState.originalMaterials.delete(mesh);
+                });
+                console.log('Preview Mode disabled: restored original materials for meshes.');
+            }
+
+            if (previewModeCheckbox) {
+                previewModeCheckbox.addEventListener('change', () => {
+                    if (previewModeCheckbox.checked) enablePreviewMode(); else disablePreviewMode();
+                });
+            }
 
             function onLayerInputsChanged() {
                 const bottom = bottomInput ? parseInt(bottomInput.value, 10) : 0;
