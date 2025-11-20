@@ -170,11 +170,78 @@
         let currentLayer = 0;
     let isGridVisible = true;
 
-        function getSharedCubeGeometry() {
-            if (!sharedCubeGeometry) {
-                sharedCubeGeometry = new THREE.BoxGeometry(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+
+        // Custom geometries for special block types
+        const geometryCache = {};
+        function getBlockGeometry(blockName) {
+            blockName = blockName.toLowerCase();
+            // Fences
+            if (blockName.includes('fence')) {
+                if (!geometryCache.fence) {
+                    // Thin vertical post
+                    const post = new THREE.BoxGeometry(BLOCK_SIZE * 0.2, BLOCK_SIZE, BLOCK_SIZE * 0.2);
+                    // Horizontal rails (2)
+                    const rail = new THREE.BoxGeometry(BLOCK_SIZE, BLOCK_SIZE * 0.1, BLOCK_SIZE * 0.1);
+                    rail.translate(0, BLOCK_SIZE * 0.25, 0);
+                    const rail2 = rail.clone();
+                    rail2.translate(0, BLOCK_SIZE * 0.5, 0);
+                    // Merge
+                    geometryCache.fence = THREE.BufferGeometryUtils.mergeBufferGeometries([post, rail, rail2]);
+                }
+                return geometryCache.fence;
             }
-            return sharedCubeGeometry;
+            // Walls
+            if (blockName.includes('wall')) {
+                if (!geometryCache.wall) {
+                    geometryCache.wall = new THREE.BoxGeometry(BLOCK_SIZE * 0.6, BLOCK_SIZE, BLOCK_SIZE * 0.6);
+                }
+                return geometryCache.wall;
+            }
+            // Stairs
+            if (blockName.includes('stair')) {
+                if (!geometryCache.stair) {
+                    // Simple L-shape
+                    const step1 = new THREE.BoxGeometry(BLOCK_SIZE, BLOCK_SIZE * 0.5, BLOCK_SIZE * 0.5);
+                    step1.translate(0, -BLOCK_SIZE * 0.25, -BLOCK_SIZE * 0.25);
+                    const step2 = new THREE.BoxGeometry(BLOCK_SIZE, BLOCK_SIZE * 0.5, BLOCK_SIZE * 0.5);
+                    step2.translate(0, BLOCK_SIZE * 0.25, BLOCK_SIZE * 0.25);
+                    geometryCache.stair = THREE.BufferGeometryUtils.mergeBufferGeometries([step1, step2]);
+                }
+                return geometryCache.stair;
+            }
+            // Slabs
+            if (blockName.includes('slab')) {
+                if (!geometryCache.slab) {
+                    geometryCache.slab = new THREE.BoxGeometry(BLOCK_SIZE, BLOCK_SIZE * 0.5, BLOCK_SIZE);
+                    geometryCache.slab.translate(0, -BLOCK_SIZE * 0.25, 0);
+                }
+                return geometryCache.slab;
+            }
+            // Panes/Bars
+            if (blockName.includes('pane') || blockName.includes('bar')) {
+                if (!geometryCache.pane) {
+                    geometryCache.pane = new THREE.BoxGeometry(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE * 0.1);
+                }
+                return geometryCache.pane;
+            }
+            // Buttons
+            if (blockName.includes('button')) {
+                if (!geometryCache.button) {
+                    geometryCache.button = new THREE.BoxGeometry(BLOCK_SIZE * 0.4, BLOCK_SIZE * 0.1, BLOCK_SIZE * 0.4);
+                    geometryCache.button.translate(0, -BLOCK_SIZE * 0.45, 0);
+                }
+                return geometryCache.button;
+            }
+            // Trapdoors
+            if (blockName.includes('trapdoor')) {
+                if (!geometryCache.trapdoor) {
+                    geometryCache.trapdoor = new THREE.BoxGeometry(BLOCK_SIZE, BLOCK_SIZE * 0.1, BLOCK_SIZE);
+                    geometryCache.trapdoor.translate(0, -BLOCK_SIZE * 0.45, 0);
+                }
+                return geometryCache.trapdoor;
+            }
+            // Default: full cube
+            return getSharedCubeGeometry();
         }
 
         // --- CUSTOM UI FUNCTIONS ---
@@ -379,7 +446,7 @@
                 z: (size.z - 1) * BLOCK_SIZE / 2
             };
 
-            const geometry = getSharedCubeGeometry();
+            // geometry selection now per block type
 
             // Get visuals for the palette entries (defensive - preserve successes)
             const settled = await Promise.allSettled(palette.map((entry) => textureManager.getBlockVisual(entry)));
@@ -433,7 +500,9 @@
                 }
                 // Use only the first material for instancing (Three.js limitation)
                 const instMaterial = materials[0];
-                const instGeometry = geometry;
+                // Select geometry for this block type
+                const blockName = (palette[paletteIndex] && palette[paletteIndex].name) ? palette[paletteIndex].name : '';
+                const instGeometry = getBlockGeometry(blockName);
                 const mesh = new THREE.InstancedMesh(instGeometry, instMaterial, group.length);
                 let i = 0;
                 group.forEach((block) => {
