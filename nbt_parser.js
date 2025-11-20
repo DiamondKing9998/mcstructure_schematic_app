@@ -11,6 +11,8 @@ import { NBT } from './nbt.min.js';
 const GZIP_MAGIC_BYTES = [0x1f, 0x8b];
 
 function isGzipCompressed(buffer) {
+    // guard for very small/invalid buffers
+    if (!buffer || (typeof buffer.byteLength === 'number' && buffer.byteLength < 2)) return false;
     const bytes = new Uint8Array(buffer.slice(0, 2));
     return bytes[0] === GZIP_MAGIC_BYTES[0] && bytes[1] === GZIP_MAGIC_BYTES[1];
 }
@@ -23,14 +25,16 @@ export async function parseMCStructureBinary(buffer) {
     const looksGzipped = isGzipCompressed(buffer);
 
     if (looksGzipped) {
-        if (typeof pako === 'undefined' || !pako.inflate) {
-            throw new Error("Pako library (Gzip decompressor) is required but not loaded.");
+        // prefer globalThis to be robust in module contexts
+        const pakoGlobal = (typeof globalThis !== 'undefined' ? globalThis.pako : (typeof window !== 'undefined' ? window.pako : null));
+        if (!pakoGlobal || typeof pakoGlobal.inflate !== 'function') {
+            throw new Error("Pako library (Gzip decompressor) is required but not loaded. Ensure pako is included (e.g. pako.min.js) and available on the page as global 'pako'.");
         }
 
         console.log("Step 1: Gzip signature detected. Attempting decompression...");
         try {
             const compressedData = new Uint8Array(buffer);
-            decompressedData = pako.inflate(compressedData);
+            decompressedData = pakoGlobal.inflate(compressedData);
             console.log(`NBT Parser: Gzip Decompression Success. Decompressed size: ${decompressedData.length} bytes.`);
         } catch (e) {
             console.error("NBT Parser: Gzip Decompression Failed.", e);
@@ -43,10 +47,27 @@ export async function parseMCStructureBinary(buffer) {
 
     console.log("Step 2: Attempting NBT Binary Parsing (Including Header Check)...");
     try {
-        parsedStructureData = NBT.parse(decompressedData);
+        // NBT.parse may be sync or return a Promise depending on the implementation.
+        let maybe = NBT.parse(decompressedData);
+        if (maybe && typeof maybe.then === 'function') {
+            parsedStructureData = await maybe;
+        } else {
+            parsedStructureData = maybe;
+        }
     } catch (e) {
-        console.error("NBT Parser: NBT Parsing Failed.", e);
-        throw new Error(`NBT Parsing Error: Failed to read Minecraft NBT structure data. The file format seems invalid after integrity checks. (${e.message})`);
+        // Try a tolerant fallback (some parsers expect an ArrayBuffer or a different typed view)
+        try {
+            let altInput = decompressedData instanceof Uint8Array ? decompressedData.buffer : decompressedData;
+            let maybeAlt = NBT.parse(altInput);
+            if (maybeAlt && typeof maybeAlt.then === 'function') {
+                parsedStructureData = await maybeAlt;
+            } else {
+                parsedStructureData = maybeAlt;
+            }
+        } catch (e2) {
+            console.error("NBT Parser: NBT Parsing Failed.", e, e2);
+            throw new Error(`NBT Parsing Error: Failed to read Minecraft NBT structure data. The file format seems invalid after integrity checks. (${e.message || e2.message})`);
+        }
     }
 
     console.log("--- NBT Parser: All Integrity Checks Passed! ---");
