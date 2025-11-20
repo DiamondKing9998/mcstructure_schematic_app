@@ -120,7 +120,22 @@
                         Show Grid
                     </button>
                 </div>
-                <input type="range" id="layerSlider" min="0" max="10" value="0" step="1" class="w-full h-2 bg-indigo-200 rounded-lg appearance-none cursor-pointer range-lg">
+
+                <div class="flex gap-2 items-center mb-2">
+                    <label class="flex items-center gap-2 text-sm text-gray-600"><input id="enableLayerFilter" type="checkbox" class="w-4 h-4" checked> Enable Layer Filter</label>
+                    <button id="showAllLayers" class="ml-auto text-xs bg-indigo-600 hover:bg-indigo-700 text-white py-1 px-3 rounded-full transition">Show All</button>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label for="layerBottomInput" class="block text-xs text-gray-500">Layer Bottom</label>
+                        <input id="layerBottomInput" type="number" min="0" value="0" class="w-full mt-1 p-2 rounded border border-gray-200 text-sm" />
+                    </div>
+                    <div>
+                        <label for="layerTopInput" class="block text-xs text-gray-500">Layer Top</label>
+                        <input id="layerTopInput" type="number" min="0" value="0" class="w-full mt-1 p-2 rounded border border-gray-200 text-sm" />
+                    </div>
+                </div>
             </div>
 
             <!-- Material List -->
@@ -397,22 +412,35 @@
         }
 
         /**
-         * Filters the 3D visualization to show only blocks up to the selected layer.
-         * @param {number} layer - The maximum layer index to display.
+         * Filters the 3D visualization to show only blocks between bottom and top (inclusive).
+         * If filtering is disabled, all blocks will be shown.
+         * @param {number} bottom - minimum layer index to display
+         * @param {number} top - maximum layer index to display
          */
-        function filterByLayer(layer) {
-            currentLayer = layer;
-            withElement('currentLayerDisplay', (el) => {
-                el.textContent = layer === maxLayer ? 'All' : layer;
-            });
-            console.log(`Layer filter set to: ${layer}`);
+        function applyLayerRange(bottom, top) {
+            // Clamp and normalize
+            bottom = Math.max(0, Number.isFinite(bottom) ? bottom : 0);
+            top = Math.min(maxLayer, Number.isFinite(top) ? top : maxLayer);
+            if (bottom > top) {
+                // swap to be tolerant
+                const tmp = bottom; bottom = top; top = tmp;
+            }
 
-            if (!blockGroup) return;
+            const enabledEl = document.getElementById('enableLayerFilter');
+            const enabled = enabledEl ? enabledEl.checked : true;
+
+            withElement('currentLayerDisplay', (el) => {
+                el.textContent = enabled ? `${bottom} - ${top}` : 'All';
+            });
+
+            if (!blockGroup || !blockGroup.children) return;
 
             blockGroup.children.forEach(mesh => {
-                const blockLayer = mesh.userData.layer;
-                mesh.visible = blockLayer <= currentLayer;
+                const layer = mesh.userData.layer;
+                mesh.visible = enabled ? (layer >= bottom && layer <= top) : true;
             });
+
+            console.log(`Layer range filter applied: ${enabled ? `${bottom}..${top}` : 'All'}`);
         }
 
         // --- EVENT HANDLERS ---
@@ -447,21 +475,43 @@
 
                     // Update global state based on parsed data
                     maxLayer = Math.max(structureData.size.y - 1, 0);
-                    currentLayer = maxLayer;
 
                     await displayMaterialList(structureData.materials);
 
-                    const slider = document.getElementById('layerSlider');
-                    if (slider) {
-                        slider.min = 0;
-                        slider.max = maxLayer;
-                        slider.value = maxLayer; 
+                    // Initialize layer controls (bottom/top) and default to first layer only to avoid lag
+                    const bottomInput = document.getElementById('layerBottomInput');
+                    const topInput = document.getElementById('layerTopInput');
+                    const enableFilter = document.getElementById('enableLayerFilter');
+                    const layerControls = document.getElementById('layerControls');
+
+                    if (bottomInput && topInput) {
+                        bottomInput.min = 0;
+                        bottomInput.max = maxLayer;
+                        topInput.min = 0;
+                        topInput.max = maxLayer;
+
+                        // Default to first (lowest) layer only to prevent initial lag
+                        bottomInput.value = 0;
+                        topInput.value = 0;
                     } else {
-                        console.warn("#layerSlider element not found in DOM.");
+                        console.warn("Layer input elements not found in DOM.");
                     }
-                    withElement('currentLayerDisplay', (el) => { el.textContent = 'All'; });
+
+                    if (enableFilter) {
+                        // Ensure filtering is enabled by default so only first layer is shown
+                        enableFilter.checked = true;
+                    }
+
+                    if (layerControls) {
+                        layerControls.classList.remove('hidden');
+                    }
 
                     await buildStructure(structureData);
+
+                    // Apply the default layer range (show only first layer)
+                    const b = bottomInput ? parseInt(bottomInput.value, 10) : 0;
+                    const t = topInput ? parseInt(topInput.value, 10) : 0;
+                    applyLayerRange(b, t);
                     
                     if (loadingMessageEl) {
                         loadingMessageEl.classList.add('hidden');
@@ -550,14 +600,27 @@
                 console.warn("#resourcePackInput element not found in DOM.");
             }
 
-            const slider = document.getElementById('layerSlider');
-            if (slider) {
-                slider.addEventListener('input', (e) => {
-                    const layer = parseInt(e.target.value, 10);
-                    filterByLayer(layer);
+            // Layer range controls
+            const bottomInput = document.getElementById('layerBottomInput');
+            const topInput = document.getElementById('layerTopInput');
+            const enableFilter = document.getElementById('enableLayerFilter');
+            const showAllBtn = document.getElementById('showAllLayers');
+
+            function onLayerInputsChanged() {
+                const bottom = bottomInput ? parseInt(bottomInput.value, 10) : 0;
+                const top = topInput ? parseInt(topInput.value, 10) : maxLayer;
+                applyLayerRange(bottom, top);
+            }
+
+            if (bottomInput) bottomInput.addEventListener('input', onLayerInputsChanged);
+            if (topInput) topInput.addEventListener('input', onLayerInputsChanged);
+            if (enableFilter) enableFilter.addEventListener('change', onLayerInputsChanged);
+            if (showAllBtn) {
+                showAllBtn.addEventListener('click', () => {
+                    if (enableFilter) enableFilter.checked = false;
+                    // reveal all
+                    applyLayerRange(0, maxLayer);
                 });
-            } else {
-                console.warn("#layerSlider element not found in DOM.");
             }
 
             const toggleGridButton = document.getElementById('toggleGrid');
