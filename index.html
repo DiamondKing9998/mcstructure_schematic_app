@@ -118,7 +118,12 @@
             const box = document.getElementById('messageBox');
             const titleEl = document.getElementById('messageTitle');
             const textEl = document.getElementById('messageText');
-            const buttonEl = box.querySelector('button');
+            const buttonEl = box ? box.querySelector('button') : null;
+
+            if (!box || !titleEl || !textEl || !buttonEl) {
+                console.warn("Message box elements are missing in the DOM.");
+                return;
+            }
 
             titleEl.textContent = title;
             textEl.innerHTML = text; 
@@ -306,7 +311,12 @@
             console.log(`Starting file processing for: ${file.name} (${file.size} bytes)`);
 
             document.getElementById('fileInput').value = '';
-            document.getElementById('loadingMessage').classList.remove('hidden');
+            const loadingMessageEl = document.getElementById('loadingMessage');
+            if (loadingMessageEl) {
+                loadingMessageEl.classList.remove('hidden');
+            } else {
+                console.warn("#loadingMessage element not found in DOM.");
+            }
 
             const reader = new FileReader();
             reader.onload = async (e) => {
@@ -332,15 +342,26 @@
 
                     buildStructure(structureData);
                     
-                    document.getElementById('loadingMessage').classList.add('hidden');
+                    if (loadingMessageEl) {
+                        loadingMessageEl.classList.add('hidden');
+                    }
+                    const emptyStateEl = document.getElementById('emptyState');
+                    if (emptyStateEl) {
+                        emptyStateEl.classList.add('hidden');
+                    }
                     showMessage("Parsing Attempt Complete", 
                         `The NBT Parser successfully processed **${file.name}**!
                         <p class="text-left mt-3">The block data and material list are still mocked, but the binary structure checks (Gzip and NBT Format Version) passed.</p>`, 
                         false);
 
                 } catch (error) {
-                    document.getElementById('loadingMessage').classList.add('hidden');
-                    document.getElementById('emptyState').classList.remove('hidden');
+                    if (loadingMessageEl) {
+                        loadingMessageEl.classList.add('hidden');
+                    }
+                    const emptyStateEl = document.getElementById('emptyState');
+                    if (emptyStateEl) {
+                        emptyStateEl.classList.remove('hidden');
+                    }
 
                     console.error("Critical File Processing Error:", error);
                     const errorMessage = `The file **${file.name}** failed to load.
@@ -368,7 +389,12 @@
             animate();
 
             // FIX: Attach event listener programmatically since we are using 'type="module"'
-            document.getElementById('fileInput').addEventListener('change', handleFileSelect);
+            const fileInput = document.getElementById('fileInput');
+            if (fileInput) {
+                fileInput.addEventListener('change', handleFileSelect);
+            } else {
+                console.warn("#fileInput element not found in DOM.");
+            }
 
             const slider = document.getElementById('layerSlider');
             slider.addEventListener('input', (e) => {
