@@ -562,22 +562,23 @@
                     const enableFilter = document.getElementById('enableLayerFilter');
                     const layerControls = document.getElementById('layerControls');
 
+
                     if (bottomInput && topInput) {
                         bottomInput.min = 0;
                         bottomInput.max = maxLayer;
                         topInput.min = 0;
                         topInput.max = maxLayer;
 
-                        // Default to first (lowest) layer only to prevent initial lag
+                        // Default to show all layers
                         bottomInput.value = 0;
-                        topInput.value = 0;
+                        topInput.value = maxLayer;
                     } else {
                         console.warn("Layer input elements not found in DOM.");
                     }
 
                     if (enableFilter) {
-                        // Ensure filtering is enabled by default so only first layer is shown
-                        enableFilter.checked = true;
+                        // Show all layers by default (filter off)
+                        enableFilter.checked = false;
                     }
 
                     if (layerControls) {
