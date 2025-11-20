@@ -191,6 +191,7 @@
         let maxLayer = 0;
         let currentLayer = 0;
     let isGridVisible = true;
+    let overlayGrid = null; // LineSegments overlay drawn on top of blocks for counting
     // cache of preview images for each palette index (Image objects)
     const palettePreviewImages = {};
 
@@ -398,7 +399,15 @@
             ctx.restore();
 
             // Mouse interaction (in CSS pixel coords) - tooltip follows mouse but clamped inside wrapper
-            canvas.onmousemove = e => {
+            // Throttle tooltip updates using requestAnimationFrame for smooth movement
+            let pendingMouse = null;
+            let rafId = null;
+            canvas.onmousemove = e => { pendingMouse = e; if (!rafId) rafId = requestAnimationFrame(processMouse); };
+            function processMouse() {
+                rafId = null;
+                const e = pendingMouse;
+                pendingMouse = null;
+                if (!e) return;
                 const wrap = canvas.parentElement || document.getElementById('layer2d-canvas-wrap');
                 const wrapRect = wrap.getBoundingClientRect();
                 const rect = canvas.getBoundingClientRect();
@@ -436,7 +445,8 @@
                 } else {
                     tooltip.style.display = 'none';
                 }
-            };
+            }
+            canvas.onmouseleave = () => { pendingMouse = null; if (rafId) { cancelAnimationFrame(rafId); rafId = null; } tooltip.style.display = 'none'; };
             canvas.onmouseleave = () => { tooltip.style.display = 'none'; };
         }
 
@@ -451,7 +461,7 @@
         function setup2DLayerGrid() {
             const input = document.getElementById('layer2dInput');
             if (!input) return;
-            input.addEventListener('input', render2DLayerGrid);
+            input.addEventListener('input', () => { render2DLayerGrid(); try { updateOverlayGrid(); } catch(e) {} });
         }
 
         // Call this after structureData is loaded
@@ -707,6 +717,46 @@
             controls.target.set(0, size.y * BLOCK_SIZE / 2, 0);
             controls.update();
             console.log(`3D structure built. Dimensions: ${size.x}x${size.y}x${size.z}`);
+            // Refresh overlay grid to match new structure
+            try { updateOverlayGrid(); } catch (e) { /* ignore if not ready */ }
+        }
+
+        // Draw an overlay grid (wireframe lines) at the currently selected layer to make counting easier
+        function updateOverlayGrid() {
+            if (!structureData || !scene) return;
+            const layerInput = document.getElementById('layer2dInput');
+            const y = layerInput ? Math.max(0, Math.min(Number(layerInput.value) || 0, structureData.size.y - 1)) : 0;
+            currentLayer = y;
+            // remove previous overlay
+            if (overlayGrid) {
+                try { scene.remove(overlayGrid); overlayGrid.geometry?.dispose(); overlayGrid.material?.dispose(); } catch (e) {}
+                overlayGrid = null;
+            }
+            const sx = structureData.size.x, sz = structureData.size.z;
+            const gridSizeX = sx * BLOCK_SIZE;
+            const gridSizeZ = sz * BLOCK_SIZE;
+            const centerX = (sx - 1) * BLOCK_SIZE / 2;
+            const centerZ = (sz - 1) * BLOCK_SIZE / 2;
+
+            const lines = new THREE.BufferGeometry();
+            const vertices = [];
+            // vertical lines along X
+            for (let x = 0; x <= sx; x++) {
+                const vx = x * BLOCK_SIZE - centerX - BLOCK_SIZE/2;
+                vertices.push(vx, y * BLOCK_SIZE + 0.01, -centerZ - BLOCK_SIZE/2);
+                vertices.push(vx, y * BLOCK_SIZE + 0.01, centerZ + BLOCK_SIZE/2);
+            }
+            // horizontal lines along Z
+            for (let z = 0; z <= sz; z++) {
+                const vz = z * BLOCK_SIZE - centerZ - BLOCK_SIZE/2;
+                vertices.push(-centerX - BLOCK_SIZE/2, y * BLOCK_SIZE + 0.01, vz);
+                vertices.push(centerX + BLOCK_SIZE/2, y * BLOCK_SIZE + 0.01, vz);
+            }
+            const verts = new Float32Array(vertices);
+            lines.setAttribute('position', new THREE.BufferAttribute(verts, 3));
+            const mat = new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 1, transparent: true, opacity: 0.65 });
+            overlayGrid = new THREE.LineSegments(lines, mat);
+            scene.add(overlayGrid);
         }
 
         /**
