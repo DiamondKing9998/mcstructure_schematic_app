@@ -10,6 +10,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <!-- Load OrbitControls for camera interaction -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <!-- Load Pako for Gzip decompression (Required for .mcstructure files) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako_inflate.min.js"></script>
     <style>
         /* Custom styles for better aesthetics and layout */
         body { font-family: 'Inter', sans-serif; background-color: #f7f9fb; }
@@ -54,7 +56,8 @@
 
     <header class="mb-4 flex justify-between items-center bg-white p-4 rounded-xl shadow-lg">
         <h1 class="text-3xl font-extrabold text-gray-800">Minecraft Structure Analyzer</h1>
-        <input type="file" id="fileInput" accept=".mcstructure" class="hidden" onchange="handleFileSelect(event)">
+        <!-- Removed onchange attribute -->
+        <input type="file" id="fileInput" accept=".mcstructure" class="hidden"> 
         <label for="fileInput" class="cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-6 rounded-lg transition duration-300 shadow-md hover:shadow-lg transform hover:scale-105">
             Load .mcstructure File
         </label>
@@ -96,7 +99,7 @@
     </main>
 
     <script type="module">
-        // Import the parsing function from the dedicated module
+        // Import the parsing function and mock data from the dedicated module
         import { parseMCStructureBinary, MOCK_BLOCK_DATA } from './nbt_parser.js';
         
         // --- CONSTANTS AND GLOBALS ---
@@ -110,7 +113,7 @@
         let currentLayer = 0;
         let isGridVisible = true;
 
-        // --- CUSTOM UI FUNCTIONS (showMessage is unchanged) ---
+        // --- CUSTOM UI FUNCTIONS ---
         function showMessage(title, text, isError = true) {
             const box = document.getElementById('messageBox');
             const titleEl = document.getElementById('messageTitle');
@@ -364,6 +367,9 @@
             console.log("Application started. Initializing Three.js.");
             initThreeJS();
             animate();
+
+            // FIX: Attach event listener programmatically since we are using 'type="module"'
+            document.getElementById('fileInput').addEventListener('change', handleFileSelect);
 
             const slider = document.getElementById('layerSlider');
             slider.addEventListener('input', (e) => {
