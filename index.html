@@ -10,8 +10,10 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <!-- Load OrbitControls for camera interaction -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-    <!-- Load Pako for Gzip decompression (Required for .mcstructure files) -->
+    <!-- Load Pako for Gzip decompression (Required for Step 1) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako_inflate.min.js"></script>
+    <!-- Load the custom NBT Parsing dependency (Simulates external library, Required for Step 2) -->
+    <script src="./nbt.min.js"></script> 
     <style>
         /* Custom styles for better aesthetics and layout */
         body { font-family: 'Inter', sans-serif; background-color: #f7f9fb; }
@@ -99,8 +101,8 @@
     </main>
 
     <script type="module">
-        // Import the parsing function and mock data from the dedicated module
-        import { parseMCStructureBinary, MOCK_BLOCK_DATA } from './nbt_parser.js';
+        // Import the parsing function. MOCK_BLOCK_DATA is now handled internally by the NBT parser mock.
+        import { parseMCStructureBinary } from './nbt_parser.js';
         
         // --- CONSTANTS AND GLOBALS ---
         const BLOCK_SIZE = 1; 
@@ -315,10 +317,9 @@
                     const buffer = e.target.result;
                     
                     // Call the dedicated parsing module
-                    await parseMCStructureBinary(buffer);
+                    structureData = await parseMCStructureBinary(buffer);
 
-                    // Since true parsing is complex, we stick to mock data for visualization
-                    structureData = MOCK_BLOCK_DATA;
+                    // Update global state based on parsed data
                     maxLayer = structureData.size.y - 1;
                     currentLayer = maxLayer;
 
@@ -335,8 +336,8 @@
                     
                     document.getElementById('loadingMessage').classList.add('hidden');
                     showMessage("Parsing Attempt Complete", 
-                        `The Gzip decompression and NBT header read succeeded for **${file.name}**!
-                        <p class="text-left mt-3">The complex NBT block data parsing (Step 3) is still mocked due to library complexity. The app is displaying placeholder data, but your file passed the binary integrity check.</p>`, 
+                        `The NBT Parser successfully processed **${file.name}**!
+                        <p class="text-left mt-3">The block data and material list are still mocked, but the binary structure checks (Gzip and NBT Format Version) passed.</p>`, 
                         false);
 
                 } catch (error) {
@@ -347,7 +348,7 @@
                     const errorMessage = `The file **${file.name}** failed to load.
                     
                     <p class="text-left mt-3">**Reason:** ${error.message}</p>
-                    <p class="text-left mt-3">Please check the console logs for detailed step failures (Gzip or NBT Header Check).</p>
+                    <p class="text-left mt-3">This error means your file is likely corrupted or not a recognized Bedrock structure format. Check the console logs for the exact step failure (Gzip Decompression or NBT Format Check).</p>
                     `;
                     showMessage("Structure File Error", errorMessage, true);
                 }
