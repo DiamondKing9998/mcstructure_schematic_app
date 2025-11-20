@@ -447,9 +447,12 @@
                         // Slab debug info
                         if ((p?.name || '').toLowerCase().includes('slab')) {
                             borderColor = getCellBorderColor(b, p);
-                            const t = (p.states?.type || p.states?.half || p.states?.shape || '').toLowerCase();
+                            const t = (p.states?.type || p.states?.half || p.states?.vertical_half || p.states?.shape || '').toLowerCase();
+                            const vertical = (p.states?.vertical_half || '').toLowerCase();
                             let slabType = 'unknown';
-                            if (t.includes('top') || t.includes('upper')) slabType = 'top';
+                            if (vertical === 'top') slabType = 'top';
+                            else if (vertical === 'bottom') slabType = 'bottom';
+                            else if (t.includes('top') || t.includes('upper')) slabType = 'top';
                             else if (t.includes('bottom') || t.includes('lower')) slabType = 'bottom';
                             else if (t.includes('double')) slabType = 'double';
                             slabDebug = `<br><b>SlabType:</b> ${slabType} <span style="color:${borderColor}">●</span> <br><b>Border:</b> ${borderColor}`;
@@ -500,10 +503,13 @@
             const states = paletteEntry.states || {};
             // Slabs: different color for top vs bottom
             if (name.includes('slab')) {
-                // Bedrock/Java names can use 'type', 'half', 'upper', or 'double'
-                const t = (states.type || states.half || states.shape || '').toLowerCase();
-                if (t.includes('top') || t.includes('upper')) return '#2563eb'; // blue for top slab
-                if (t.includes('bottom') || t.includes('lower')) return '#dc2626'; // red for bottom slab
+                // Bedrock/Java names can use 'type', 'half', 'vertical_half', 'upper', or 'double'
+                const t = (states.type || states.half || states.vertical_half || states.shape || '').toLowerCase();
+                const vertical = (states.vertical_half || '').toLowerCase();
+                if (vertical === 'top') return '#2563eb'; // blue for top slab
+                if (vertical === 'bottom') return '#dc2626'; // red for bottom slab
+                if (t.includes('top') || t.includes('upper')) return '#2563eb';
+                if (t.includes('bottom') || t.includes('lower')) return '#dc2626';
                 if (t.includes('double')) return '#16a34a'; // green for double slab
                 // fallback: if state missing, alternate by block name
                 if (name.includes('top')) return '#2563eb';
