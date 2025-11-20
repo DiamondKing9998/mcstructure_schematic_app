@@ -389,8 +389,10 @@
                 const diag = paletteVisuals.map((v, i) => {
                     const mat = Array.isArray(v.materials) && v.materials[0] ? v.materials[0] : null;
                     const src = mat?.map?.userData?.sourcePath || mat?.userData?.sourcePath || mat?.map?.userData?.previewSrc || mat?.userData?.previewSrc || null;
-                    return { index: i, id: (palette[i] && (palette[i].name || palette[i].block)) || JSON.stringify(palette[i]), src };
+                    return { index: i, id: (palette[i] && (palette[i].name || palette[i].block)) || JSON.stringify(palette[i]), src, materials: Array.isArray(v.materials) ? v.materials.length : (v.materials ? 1 : 0) };
                 });
+                // Expose a global diagnostic snapshot so the console can read it any time
+                window._paletteVisuals = diag;
                 console.log('Palette visual sources (first 200):', diag.slice(0, 200));
             } catch (e) {
                 console.warn('Palette diagnostic failed', e);
@@ -666,13 +668,18 @@
 
             // Expose a helper to dump the palette visuals (which textures each palette entry resolved to)
             window.dumpPaletteVisuals = function() {
-                if (!Array.isArray(paletteVisuals)) { console.warn('paletteVisuals not available'); return; }
-                paletteVisuals.forEach((v, i) => {
-                    const mat = Array.isArray(v.materials) && v.materials[0] ? v.materials[0] : null;
-                    const src = mat?.map?.userData?.sourcePath || mat?.userData?.sourcePath || mat?.map?.userData?.previewSrc || mat?.userData?.previewSrc || null;
-                    console.log(`Palette[${i}] id=${(palette[i] && (palette[i].name || palette[i].block)) || JSON.stringify(palette[i])} -> ${src}`);
+                const diag = window._paletteVisuals;
+                if (Array.isArray(diag) && diag.length > 0) {
+                    diag.forEach(d => console.log(`Palette[${d.index}] id=${d.id} -> ${d.src} (materials:${d.materials})`));
+                    console.log('paletteVisuals length:', diag.length);
+                    return;
+                }
+                // Fallback: try to print a simple view by inspecting palette and attempting to compute srcs
+                if (!Array.isArray(palette)) { console.warn('Palette not available to recompute visuals'); return; }
+                palette.forEach((p, i) => {
+                    console.log(`Palette[${i}] id=${(p && (p.name || p.block)) || JSON.stringify(p)} -> (no diagnostic cached)`);
                 });
-                console.log('paletteVisuals length:', paletteVisuals.length);
+                console.log('No cached palette visuals available (call after a successful buildStructure to generate _paletteVisuals).');
             };
 
             // FIX: Attach event listener programmatically since we are using 'type="module"'
