@@ -398,8 +398,17 @@
                 console.warn('Palette diagnostic failed', e);
             }
 
-            // Create a mesh per block (simpler and less error-prone). We'll optimize later.
+            // Create a mesh per block (simpler and less error-prone). Skip air entries to avoid invisible overdraw.
+            let skippedAir = 0;
             blocks.forEach((block) => {
+                const paletteEntry = (palette && palette[block.paletteIndex]) || null;
+                const entryName = (paletteEntry && paletteEntry.name) ? String(paletteEntry.name).toLowerCase() : '';
+                // If this palette entry is air, skip creating a mesh for it
+                if (/(^|:)air$/.test(entryName)) {
+                    skippedAir++;
+                    return;
+                }
+
                 const visual = paletteVisuals[block.paletteIndex] || textureManager.getFallbackVisual();
                 let materials = Array.isArray(visual.materials) ? visual.materials.slice() : [];
                 if (materials.length < 6) {
@@ -416,6 +425,7 @@
                 mesh.userData = { layer: block.y };
                 blockGroup.add(mesh);
             });
+            if (skippedAir > 0) console.log(`Skipped creating ${skippedAir} air meshes during buildStructure.`);
 
             // Adjust grid size
             scene.remove(gridHelper);
