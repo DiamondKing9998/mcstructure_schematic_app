@@ -136,6 +136,9 @@ function buildBlocks(structureSection, size, paletteLength) {
     const areaXZ = size.x * size.z;
     const blocks = [];
 
+    // Debug: log number of layers and expected Y size
+    console.log(`[DEBUG] buildBlocks: block_indices layers: ${blockIndicesLayers.length}, expected Y size: ${size.y}`);
+
     for (let y = 0; y < blockIndicesLayers.length; y++) {
         const layer = blockIndicesLayers[y] ?? [];
         // Only iterate up to the expected plane size for safety
