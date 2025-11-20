@@ -399,7 +399,9 @@
 
             // Draw cell borders on top of textures so every cell has a visible border
             ctx.save();
-            ctx.lineWidth = Math.max(1, Math.round(1 * (window.devicePixelRatio || 1)));
+            // make stroke half as thick as before; keep a reasonable minimum
+            const strokeWidth = Math.max(0.5, (0.5 * dpr));
+            ctx.lineWidth = strokeWidth;
             ctx.strokeStyle = '#2b3440'; // darker, higher contrast
             for (let i = 0; i < cellInfo.length; i++) {
                 const c = cellInfo[i];
