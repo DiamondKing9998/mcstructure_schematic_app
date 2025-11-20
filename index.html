@@ -12,6 +12,8 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <!-- Load TGALoader for TGA textures -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/TGALoader.js"></script>
+    <!-- BufferGeometryUtils for merging geometries to reduce draw calls -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/utils/BufferGeometryUtils.js"></script>
     <!-- Load JSZip for user-provided Bedrock packs -->
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
     <!-- Load Pako for Gzip decompression (Required for Step 1) -->
@@ -318,6 +320,10 @@
             blockGroup = new THREE.Group();
             scene.add(blockGroup);
 
+            if (!THREE.BufferGeometryUtils) {
+                console.warn('THREE.BufferGeometryUtils is not available. Merging geometries will not work; consider adding the BufferGeometryUtils script.');
+            }
+
             gridHelper = new THREE.GridHelper(50, 50, 0x444444, 0x444444);
             gridHelper.position.y = -BLOCK_SIZE / 2; 
             scene.add(gridHelper);
@@ -382,24 +388,59 @@
                 return textureManager.getFallbackVisual();
             });
 
+            // For performance, merge identical palette-indexed cubes into single BufferGeometries
+            const grouped = new Map();
             blocks.forEach((block) => {
-                const visual = paletteVisuals[block.paletteIndex] || textureManager.getFallbackVisual();
+                const key = block.paletteIndex;
+                if (!grouped.has(key)) grouped.set(key, []);
+                grouped.get(key).push(block);
+            });
+
+            grouped.forEach((groupBlocks, paletteIndex) => {
+                const visual = paletteVisuals[paletteIndex] || textureManager.getFallbackVisual();
                 // Ensure we have exactly 6 materials (one per face). Fill with fallback where missing.
                 let materials = Array.isArray(visual.materials) ? visual.materials.slice() : [];
                 if (materials.length < 6) {
                     const fallback = textureManager.getFallbackVisual().materials[0];
                     while (materials.length < 6) materials.push(fallback);
                 }
-                const mesh = new THREE.Mesh(geometry, materials);
 
-                mesh.position.set(
-                    block.x * BLOCK_SIZE - center.x,
-                    block.y * BLOCK_SIZE + BLOCK_SIZE / 2,
-                    block.z * BLOCK_SIZE - center.z
-                );
-                mesh.userData = { layer: block.y };
+                // Create an array of geometries positioned for each block, then merge
+                const geomInstances = groupBlocks.map((block) => {
+                    const geom = geometry.clone();
+                    geom.translate(
+                        block.x * BLOCK_SIZE - center.x,
+                        block.y * BLOCK_SIZE + BLOCK_SIZE / 2,
+                        block.z * BLOCK_SIZE - center.z
+                    );
+                    return geom;
+                });
 
-                blockGroup.add(mesh);
+                let mergedGeom = null;
+                try {
+                    mergedGeom = THREE.BufferGeometryUtils.mergeBufferGeometries(geomInstances, false);
+                } catch (e) {
+                    console.warn('mergeBufferGeometries failed, falling back to individual meshes', e);
+                }
+
+                if (mergedGeom) {
+                    const mergedMesh = new THREE.Mesh(mergedGeom, materials);
+                    // Mark layer as the first block's layer for filtering; filtering will check mesh.userData.layer
+                    mergedMesh.userData = { layer: groupBlocks[0].y };
+                    blockGroup.add(mergedMesh);
+                } else {
+                    // Fallback: add individual meshes
+                    groupBlocks.forEach((block) => {
+                        const mesh = new THREE.Mesh(geometry, materials);
+                        mesh.position.set(
+                            block.x * BLOCK_SIZE - center.x,
+                            block.y * BLOCK_SIZE + BLOCK_SIZE / 2,
+                            block.z * BLOCK_SIZE - center.z
+                        );
+                        mesh.userData = { layer: block.y };
+                        blockGroup.add(mesh);
+                    });
+                }
             });
 
             // Adjust grid size
@@ -447,16 +488,36 @@
 
             // Quick diagnostic: if only a small range is shown, log a summary of distinct material sources
             if (enabled && (top - bottom) <= 1) {
-                const sources = new Set();
+                const sourceMap = new Map();
+                let visibleCount = 0;
                 blockGroup.children.forEach(mesh => {
                     if (!mesh.visible) return;
+                    visibleCount++;
                     const mats = mesh.material || [];
                     (Array.isArray(mats) ? mats : [mats]).forEach(m => {
-                        const src = m?.map?.userData?.sourcePath || m?.userData?.sourcePath || m?.userData?.previewSrc || null;
-                        if (src) sources.add(src);
+                        const tex = m?.map;
+                        const src = tex?.userData?.sourcePath || m?.userData?.sourcePath || tex?.userData?.previewSrc || m?.userData?.previewSrc || null;
+                        const key = src || '__no_src__';
+                        if (!sourceMap.has(key)) {
+                            sourceMap.set(key, { count: 0, sample: tex || m });
+                        }
+                        sourceMap.get(key).count += 1;
                     });
                 });
-                console.log(`Layer range filter applied: ${enabled ? `${bottom}..${top}` : 'All'}. Distinct texture sources for visible meshes:`, Array.from(sources).slice(0,50));
+
+                const summary = [];
+                for (const [src, info] of sourceMap.entries()) {
+                    const sample = info.sample;
+                    const tex = sample?.map || sample;
+                    const img = tex?.image;
+                    const width = img?.width || img?.naturalWidth || (img && img.width) || null;
+                    const height = img?.height || img?.naturalHeight || (img && img.height) || null;
+                    const resized = tex?.userData?.resized || false;
+                    const preview = tex?.userData?.previewSrc || sample?.userData?.previewSrc || null;
+                    summary.push({ src: src === '__no_src__' ? null : src, count: info.count, width, height, resized, preview });
+                }
+
+                console.log(`Layer range filter applied: ${enabled ? `${bottom}..${top}` : 'All'}. Visible meshes: ${visibleCount}. Texture source summary (first 50):`, summary.slice(0,50));
             } else {
                 console.log(`Layer range filter applied: ${enabled ? `${bottom}..${top}` : 'All'}`);
             }
