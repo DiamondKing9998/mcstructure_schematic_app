@@ -713,6 +713,59 @@
                 console.log('paletteVisualObjects length:', visuals.length);
             };
 
+            // Spawn a small textured probe cube in front of the camera using the first available loaded texture.
+            // Use this when visible meshes don't have maps or are invisible to verify textures render.
+            window.spawnTextureProbe = function() {
+                const app = window._app || {};
+                const sceneLocal = app.scene;
+                const cameraLocal = app.camera;
+                const texManager = app.textureManager;
+                if (!sceneLocal || !cameraLocal) { console.warn('Scene or camera not available'); return; }
+
+                // Remove previous probe
+                const prev = sceneLocal.getObjectByName('textureProbe');
+                if (prev) {
+                    sceneLocal.remove(prev);
+                    try { prev.geometry?.dispose(); } catch(e) {}
+                    try { prev.material?.dispose(); } catch(e) {}
+                }
+
+                let tex = null;
+                if (Array.isArray(window._paletteVisualObjects)) {
+                    for (const v of window._paletteVisualObjects) {
+                        const mats = Array.isArray(v.materials) ? v.materials : [v.materials];
+                        for (const m of mats) {
+                            if (m && m.map) { tex = m.map; break; }
+                        }
+                        if (tex) break;
+                    }
+                }
+
+                if (!tex && texManager && texManager.textureCache) {
+                    for (const t of texManager.textureCache.values()) {
+                        if (t) { tex = t; break; }
+                    }
+                }
+
+                if (!tex) { console.warn('No loaded texture found to spawn probe.'); return; }
+
+                const dir = new THREE.Vector3();
+                cameraLocal.getWorldDirection(dir);
+                const pos = cameraLocal.position.clone().add(dir.multiplyScalar(5));
+
+                const geom = new THREE.BoxGeometry(1,1,1);
+                const mat = new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide });
+                const probe = new THREE.Mesh(geom, mat);
+                probe.name = 'textureProbe';
+                probe.position.copy(pos);
+                sceneLocal.add(probe);
+                if (app.controls && typeof app.controls.target !== 'undefined') {
+                    app.controls.target.copy(probe.position);
+                    app.controls.update();
+                }
+                console.log('Spawned texture probe using', tex.userData?.sourcePath || '(unknown)');
+            };
+
             // FIX: Attach event listener programmatically since we are using 'type="module"'
             const fileInput = document.getElementById('fileInput');
             if (fileInput) {
