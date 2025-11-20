@@ -384,6 +384,18 @@
             const settled = await Promise.allSettled(palette.map((entry) => textureManager.getBlockVisual(entry)));
             const paletteVisuals = settled.map((res, idx) => (res.status === 'fulfilled' && res.value) ? res.value : textureManager.getFallbackVisual());
 
+            // Diagnostic: log palette visuals to help detect when many entries map to 'air' or a missing texture
+            try {
+                const diag = paletteVisuals.map((v, i) => {
+                    const mat = Array.isArray(v.materials) && v.materials[0] ? v.materials[0] : null;
+                    const src = mat?.map?.userData?.sourcePath || mat?.userData?.sourcePath || mat?.map?.userData?.previewSrc || mat?.userData?.previewSrc || null;
+                    return { index: i, id: (palette[i] && (palette[i].name || palette[i].block)) || JSON.stringify(palette[i]), src };
+                });
+                console.log('Palette visual sources (first 200):', diag.slice(0, 200));
+            } catch (e) {
+                console.warn('Palette diagnostic failed', e);
+            }
+
             // Create a mesh per block (simpler and less error-prone). We'll optimize later.
             blocks.forEach((block) => {
                 const visual = paletteVisuals[block.paletteIndex] || textureManager.getFallbackVisual();
@@ -650,6 +662,17 @@
                     }));
                     console.log(`Mesh[${meshIdx}] layer=${mesh.userData?.layer} materials=${mats.length}`, matInfo);
                 });
+            };
+
+            // Expose a helper to dump the palette visuals (which textures each palette entry resolved to)
+            window.dumpPaletteVisuals = function() {
+                if (!Array.isArray(paletteVisuals)) { console.warn('paletteVisuals not available'); return; }
+                paletteVisuals.forEach((v, i) => {
+                    const mat = Array.isArray(v.materials) && v.materials[0] ? v.materials[0] : null;
+                    const src = mat?.map?.userData?.sourcePath || mat?.userData?.sourcePath || mat?.map?.userData?.previewSrc || mat?.userData?.previewSrc || null;
+                    console.log(`Palette[${i}] id=${(palette[i] && (palette[i].name || palette[i].block)) || JSON.stringify(palette[i])} -> ${src}`);
+                });
+                console.log('paletteVisuals length:', paletteVisuals.length);
             };
 
             // FIX: Attach event listener programmatically since we are using 'type="module"'
