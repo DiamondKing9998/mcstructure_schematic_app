@@ -149,37 +149,30 @@ function buildPalette(structureSection) {
 function buildBlocks(structureSection, size, paletteLength) {
     // block_indices is an array of layers (each layer is a flattened X*Z plane) -- iterate every layer
     const blockIndices = structureSection.block_indices ?? [];
-    const areaXZ = size.x * size.z;
     const blocks = [];
-
-    // Support both array and object (Bedrock format)
-    let layers = [];
+    // Bedrock: block_indices[0] is a single large flattened array (X*Y*Z)
+    let flat = null;
     if (Array.isArray(blockIndices)) {
-        layers = blockIndices.map((layer, i) => ({ y: i, data: layer }));
+        flat = blockIndices[0];
     } else if (typeof blockIndices === 'object' && blockIndices !== null) {
-        // Object with string keys for Y layers
-        layers = Object.keys(blockIndices)
-            .map(k => ({ y: parseInt(k, 10), data: blockIndices[k] }))
-            .sort((a, b) => a.y - b.y);
+        // Use the first key (usually '0')
+        const keys = Object.keys(blockIndices).sort();
+        flat = blockIndices[keys[0]];
     }
-
-    // Debug: log number of layers and expected Y size
-    console.log(`[DEBUG] buildBlocks: block_indices layers: ${layers.length}, expected Y size: ${size.y}`);
-
-    for (const { y, data: layer } of layers) {
-        if (!Array.isArray(layer)) continue;
-        const limit = Math.min(layer.length, areaXZ);
-        for (let idx = 0; idx < limit; idx++) {
-            const paletteIndex = toNumber(layer[idx]);
-            if (!Number.isFinite(paletteIndex) || paletteIndex < 0 || paletteIndex >= paletteLength) {
-                continue;
-            }
-            const z = Math.floor(idx / size.x);
-            const x = idx % size.x;
+    if (Array.isArray(flat)) {
+        const { x: sx, y: sy, z: sz } = size;
+        const total = sx * sy * sz;
+        console.log(`[DEBUG] buildBlocks: block_indices[0] length: ${flat.length}, expected: ${total}`);
+        for (let i = 0; i < Math.min(flat.length, total); i++) {
+            const paletteIndex = toNumber(flat[i]);
+            if (!Number.isFinite(paletteIndex) || paletteIndex < 0 || paletteIndex >= paletteLength) continue;
+            // Convert flat index to (x, y, z)
+            const x = i % sx;
+            const y = Math.floor(i / sx) % sy;
+            const z = Math.floor(i / (sx * sy));
             blocks.push({ x, y, z, paletteIndex });
         }
     }
-
     return blocks;
 }
 
